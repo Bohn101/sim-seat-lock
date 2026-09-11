@@ -9,8 +9,20 @@ OpenXR API layers are an official Khronos hook. Motion compensation is not an of
 ## v0 — measured
 
 ```
-Witmotion → Pose process → shared memory → our OpenXR layer → SteamVR → ACE
+Witmotion → Pose process → Local\SimSeatLock.Rig.v1  → our OpenXR layer → SteamVR → title
+title xrLocateViews → layer → Local\SimSeatLock.Game.v1 → Pose viz
+SteamVR openvr_api   → Pose viz (independent of the title)
 ```
+
+`SimSeatLock.Pose` publishes T_rig at ≥250 Hz. The layer is not required for IMU + SteamVR + virtual numeric. Game OpenXR numbers stay at last/zero until the layer writes the Game map.
+
+Channels are not collapsed:
+
+- SteamVR seated/standing `HmdMatrix34` → quat + metres
+- Game `XrPosef` from `xrLocateViews` (ACE, AMS2, …)
+- T_rig from Witmotion / virtual numeric (Euler deg + metres, gains, Home)
+- Adjusted preview `inv(T_rig) * T_hmd` (off = identity)
+- Delta = expected headset vs adjusted
 
 ## v1 — predictive + residual
 

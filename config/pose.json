@@ -8,5 +8,14 @@
   "invert": { "roll": false, "pitch": false, "yaw": false },
   "swap_pitch_roll": false,
   "gain_rot_deg": { "roll": 1.0, "pitch": 1.0, "yaw": 0.0 },
-  "gain_trans_m": { "surge": 0.0, "sway": 0.0, "heave": 0.0 }
+  "gain_trans_m": { "surge": 0.0, "sway": 0.0, "heave": 0.0 },
+  "steam_vr_seated": true,
+  "preview_armed": false,
+  "game_processes": [
+    "AssettoCorsaEVO",
+    "assetto_corsa_evo",
+    "AMS2AVX",
+    "AMS2",
+    "iRacingSim64DX11"
+  ]
 }
