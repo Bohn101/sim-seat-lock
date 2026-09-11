@@ -5,4 +5,5 @@ obj/
 *.suo
 build/
 out/
+publish/
 *.log
