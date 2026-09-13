@@ -11,7 +11,7 @@ T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
 `T_cor` is IMU-to-eye from `config/geometry.json`. Preview off = identity (desktop numbers only). The OpenXR layer is what changes the headset.
 
 - **v0.2 (now):** `SimSeatLock.Pose` — Witmotion serial (COM8 / 115200 default), Home (Z), shared-memory publish ≥250 Hz, desktop viz. Dropped = checksum/sync only.
-- **v0 next:** `SimSeatLock.Layer` — identity OpenXR passthrough, write `Game.v1`, then inverse pose about CoR.
+- **v0 next:** `SimSeatLock.Layer` — identity OpenXR passthrough, write `Game.v1`, then inverse pose about CoR when Rig.v1 `Armed`.
 - **v1:** predictive pose from the motion-command stream, IMU residual.
 - **Not** SimHub Motion, **not** SRS IntelliComp, **not** FlyPT Mover, **not** SimTools mmap/UDP/serial as a pose source, **not** BuzzteeBear OXRMC as a dependency.
 
@@ -51,16 +51,15 @@ dotnet publish src\SimSeatLock.Pose\SimSeatLock.Pose.csproj -c Release -r win-x6
 publish\SimSeatLock.Pose.exe
 ```
 
-Fresh clone:
+## Layer (Git CMD)
 
 ```bat
-cd /d %USERPROFILE%
-git clone https://github.com/Bohn101/sim-seat-lock.git
-cd sim-seat-lock
-dotnet test SimSeatLock.sln -c Release
-dotnet publish src\SimSeatLock.Pose\SimSeatLock.Pose.csproj -c Release -r win-x64 --self-contained false -o publish
-publish\SimSeatLock.Pose.exe
+cd /d C:\Users\Bohnster\sim-seat-lock
+src\SimSeatLock.Layer\build-layer.cmd
+src\SimSeatLock.Layer\install-layer.cmd
 ```
+
+Requires VS 2022 C++ x64. Details: [`src/SimSeatLock.Layer/README.md`](src/SimSeatLock.Layer/README.md) and [`docs/LAYER.md`](docs/LAYER.md).
 
 Edit `publish\config\pose.json` (COM port). Defaults: Witmotion COM8, 115200.
 
