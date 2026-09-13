@@ -34,7 +34,6 @@ public sealed class PoseConfig
         "iRacingSim64DX11"
     ];
 
-    /// <summary>Same object as <see cref="Witmotion"/> — Program constructs the serial source from this.</summary>
     [JsonIgnore]
     public SerialSettings Serial => Witmotion;
 
@@ -122,19 +121,15 @@ public sealed class AxisGains
     public double Heave { get; set; }
 }
 
-/// <summary>
-/// CoR is the IMU (platform center). Labeled eye offsets derive imu_to_eye_m
-/// in OpenXR metres: X = right, Y = up, Z = -forward.
-/// </summary>
 public sealed class GeometryConfig
 {
     public string Comment { get; set; } =
-        "CoR is the IMU (platform center). Eyes ~1.0-1.2 m above. No TV canvas.";
+        "CoR is the IMU (platform center). Eyes ~1.0-1.2 m above, 0.27 m aft of CoR. No TV canvas.";
 
-    public double EyeForwardM { get; set; }
+    public double EyeForwardM { get; set; } = -0.27;
     public double EyeRightM { get; set; }
     public double EyeUpM { get; set; } = 1.10;
-    public Xyz ImuToEyeM { get; set; } = new() { X = 0, Y = 1.10, Z = 0 };
+    public Xyz ImuToEyeM { get; set; } = new() { X = 0, Y = 1.10, Z = 0.27 };
 
     public void Normalize()
     {
