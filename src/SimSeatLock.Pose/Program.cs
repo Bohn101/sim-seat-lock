@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using SimSeatLock.Pose.Config;
 using SimSeatLock.Pose.Publish;
 using SimSeatLock.Pose.Tracking;
@@ -7,11 +8,19 @@ namespace SimSeatLock.Pose;
 
 public static class Program
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
+
+    const int AttachParentProcess = -1;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool AttachConsole(int dwProcessId);
 
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length > 0)
+            AttachConsole(AttachParentProcess);
+
         try
         {
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -64,7 +73,14 @@ public static class Program
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "SimSeatLock.Pose", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            try
+            {
+                MessageBox.Show(ex.ToString(), "SimSeatLock.Pose", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch
+            {
+                Console.Error.WriteLine(ex);
+            }
             return 1;
         }
     }
@@ -89,11 +105,11 @@ public static class Program
     static void PrintHelp()
     {
         Console.WriteLine($"SimSeatLock.Pose v{Version}");
-        Console.WriteLine("Double-click SimSeatLock.Pose.exe; settings are publish/config/pose.json.");
+        Console.WriteLine("Double-click SimSeatLock.Pose.exe; settings are publish\\config\\pose.json.");
         Console.WriteLine();
         Console.WriteLine("  --help");
         Console.WriteLine("  --list-ports");
-        Console.WriteLine("  --port COM3");
+        Console.WriteLine("  --port COM8");
         Console.WriteLine("  --baud 115200");
         Console.WriteLine("  --source witmotion|virtual");
         Console.WriteLine("  --config PATH");
