@@ -1,4 +1,7 @@
 {
-  "comment": "Eye vs IMU only. No TV canvas.",
+  "comment": "CoR is the IMU (platform center). Eyes ~1.0-1.2 m above. No TV canvas.",
+  "eye_forward_m": 0.0,
+  "eye_right_m": 0.0,
+  "eye_up_m": 1.10,
   "imu_to_eye_m": { "x": 0.0, "y": 1.10, "z": 0.0 }
 }

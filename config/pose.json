@@ -1,7 +1,7 @@
 {
   "source": "witmotion",
   "witmotion": {
-    "port": "COM3",
+    "port": "COM8",
     "baud": 115200
   },
   "home_key": "Z",
