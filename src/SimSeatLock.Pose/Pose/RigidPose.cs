@@ -44,7 +44,7 @@ public readonly struct RigidPose
             RollDeg = roll,
             PitchDeg = pitch,
             YawDeg = yaw,
-            SurgeM = Pz,
+            SurgeM = -Pz,
             SwayM = Px,
             HeaveM = Py,
             TimestampUtc = TimestampUtc,

@@ -37,5 +37,20 @@ public class WitmotionProtocolTests
         parser.Feed(bytes, sink);
         Assert.Equal(2, sink.Count);
         Assert.Equal(WitmotionProtocol.TypeAngle, sink[0].Type);
+        Assert.Equal(0, parser.DroppedChecksum);
+    }
+
+    [Fact]
+    public void StreamParser_CountsChecksumAsDrop_NotValidAccel()
+    {
+        var goodAccel = WitmotionProtocol.BuildPacket(WitmotionProtocol.TypeAccel, 1, 2, 3, 4);
+        var bad = WitmotionProtocol.BuildPacket(WitmotionProtocol.TypeAngle, 1, 2, 3, 4);
+        bad[10] ^= 0xFF;
+        var parser = new WitmotionStreamParser();
+        var sink = new List<WitPacket>();
+        parser.Feed(goodAccel.Concat(bad).ToArray(), sink);
+        Assert.Single(sink);
+        Assert.Equal(WitmotionProtocol.TypeAccel, sink[0].Type);
+        Assert.True(parser.DroppedChecksum >= 1);
     }
 }
