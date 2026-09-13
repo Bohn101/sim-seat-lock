@@ -1,0 +1,3 @@
+LIBRARY XR_APILAYER_NOVENDOR_sim_seat_lock
+EXPORTS
+    xrNegotiateLoaderApiLayerInterface
