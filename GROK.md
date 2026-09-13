@@ -69,7 +69,7 @@ docs/                     architecture notes
 5. Prefer small, compiling increments. Do not scaffold a graveyard of empty projects.
 6. Keep CPU cheap.
 7. Recenter rules: ACE Reset View and SimSeatLock Home only with platform at SimTools neutral and compensation disarmed.
-8. Terminal commands for the user: Git CMD / cmd.exe only (not Git Bash).
+8. Terminal commands for the user: Git Bash only (not Git CMD / cmd.exe).
 9. Do not use OpenXR-MotionCompensation, SimHub Motion, SRS, FlyPT Mover, or SimTools mmap/UDP/serial as a pose source.
 
 ## v0 build order
