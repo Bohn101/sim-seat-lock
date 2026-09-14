@@ -6,19 +6,24 @@ namespace SimSeatLock.Pose;
 /// </summary>
 public static class PoseMath
 {
+    /// <summary>
+    /// Vehicle RPY (deg) → OpenXR Y-up, -Z forward.
+    /// +roll = lean right → rot Z by -roll. +pitch = nose up → rot X by -pitch.
+    /// +yaw = nose right → rot Y by -yaw. Do not use Config swap to fix this pack.
+    /// </summary>
     public static void EulerDegToQuat(double rollDeg, double pitchDeg, double yawDeg,
         out double qx, out double qy, out double qz, out double qw)
     {
-        double r = rollDeg * Math.PI / 180.0;
-        double p = pitchDeg * Math.PI / 180.0;
-        double y = yawDeg * Math.PI / 180.0;
-        double cr = Math.Cos(r * 0.5), sr = Math.Sin(r * 0.5);
-        double cp = Math.Cos(p * 0.5), sp = Math.Sin(p * 0.5);
+        double x = -pitchDeg * Math.PI / 180.0;
+        double y = -yawDeg * Math.PI / 180.0;
+        double z = -rollDeg * Math.PI / 180.0;
+        double cx = Math.Cos(x * 0.5), sx = Math.Sin(x * 0.5);
         double cy = Math.Cos(y * 0.5), sy = Math.Sin(y * 0.5);
-        qw = cr * cp * cy + sr * sp * sy;
-        qx = sr * cp * cy - cr * sp * sy;
-        qy = cr * sp * cy + sr * cp * sy;
-        qz = cr * cp * sy - sr * sp * cy;
+        double cz = Math.Cos(z * 0.5), sz = Math.Sin(z * 0.5);
+        qw = cx * cy * cz + sx * sy * sz;
+        qx = sx * cy * cz - cx * sy * sz;
+        qy = cx * sy * cz + sx * cy * sz;
+        qz = cx * cy * sz - sx * sy * cz;
         Normalize(ref qx, ref qy, ref qz, ref qw);
     }
 

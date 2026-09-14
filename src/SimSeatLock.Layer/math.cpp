@@ -46,18 +46,21 @@ static void Rotate(float qx, float qy, float qz, float qw, float vx, float vy, f
     QuatMul(ix, iy, iz, iw, cx, cy, cz, cw, ox, oy, oz, &dummy);
 }
 
+// Vehicle RPY (deg) → OpenXR Y-up, -Z forward.
+// +roll lean right → rot Z by -roll. +pitch nose up → rot X by -pitch.
+// +yaw nose right → rot Y by -yaw.
 static void EulerDegToQuat(float rollDeg, float pitchDeg, float yawDeg,
                            float* qx, float* qy, float* qz, float* qw) {
-    const float r = rollDeg * 3.14159265358979323846f / 180.0f;
-    const float p = pitchDeg * 3.14159265358979323846f / 180.0f;
-    const float y = yawDeg * 3.14159265358979323846f / 180.0f;
-    const float cr = cosf(r * 0.5f), sr = sinf(r * 0.5f);
-    const float cp = cosf(p * 0.5f), sp = sinf(p * 0.5f);
+    const float x = -pitchDeg * 3.14159265358979323846f / 180.0f;
+    const float y = -yawDeg * 3.14159265358979323846f / 180.0f;
+    const float z = -rollDeg * 3.14159265358979323846f / 180.0f;
+    const float cx = cosf(x * 0.5f), sx = sinf(x * 0.5f);
     const float cy = cosf(y * 0.5f), sy = sinf(y * 0.5f);
-    *qw = cr * cp * cy + sr * sp * sy;
-    *qx = sr * cp * cy - cr * sp * sy;
-    *qy = cr * sp * cy + sr * cp * sy;
-    *qz = cr * cp * sy - sr * sp * cy;
+    const float cz = cosf(z * 0.5f), sz = sinf(z * 0.5f);
+    *qw = cx * cy * cz + sx * sy * sz;
+    *qx = sx * cy * cz - cx * sy * sz;
+    *qy = cx * sy * cz + sx * cy * sz;
+    *qz = cx * cy * sz - sx * sy * cz;
     QuatNorm(qx, qy, qz, qw);
 }
 
@@ -120,7 +123,7 @@ static bool ParseFloatField(const char* json, const char* key, float* out) {
     p = strchr(p, ':');
     if (!p) return false;
     *out = strtof(p + 1, nullptr);
-    return true;
+    return false;
 }
 
 static bool TryLoadGeometryFile(const char* path, float* eyeX, float* eyeY, float* eyeZ) {
