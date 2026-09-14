@@ -1,6 +1,6 @@
 // SimSeatLock.Layer — thin OpenXR API layer (Khronos loader interface v1).
 // Writes Local\\SimSeatLock.Game.v1 on negotiate + CreateInstance + xrLocateViews.
-// Log: publish\\layer\\layer.log
+// Log: publish\\layer\\layer.log  (DllMain writes on LoadLibrary)
 
 #include "openxr_min.h"
 #include "shm.h"
@@ -174,12 +174,27 @@ XrResult XRAPI_CALL LayerGetInstanceProcAddr(XrInstance instance, const char* na
 
 } // namespace
 
+extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(module);
+        char exe[MAX_PATH]{};
+        GetModuleFileNameA(nullptr, exe, MAX_PATH);
+        Log("DllMain PROCESS_ATTACH pid=%lu exe=%s", GetCurrentProcessId(), exe);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        Log("DllMain PROCESS_DETACH pid=%lu", GetCurrentProcessId());
+    }
+    return TRUE;
+}
+
 extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrNegotiateLoaderApiLayerInterface(
     const XrNegotiateLoaderInfo* loaderInfo, const char* layerName, XrNegotiateApiLayerRequest* apiLayerRequest) {
-    Log("negotiate layerName=%s minIf=%u maxIf=%u",
+    char exe[MAX_PATH]{};
+    GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    Log("negotiate layerName=%s minIf=%u maxIf=%u exe=%s",
         layerName ? layerName : "(null)",
         loaderInfo ? loaderInfo->minInterfaceVersion : 0,
-        loaderInfo ? loaderInfo->maxInterfaceVersion : 0);
+        loaderInfo ? loaderInfo->maxInterfaceVersion : 0,
+        exe);
     if (!loaderInfo || !apiLayerRequest) return XR_ERROR_INITIALIZATION_FAILED;
     if (layerName && layerName[0] && strcmp(layerName, kLayerName) != 0) {
         Log("reject unexpected layerName");
