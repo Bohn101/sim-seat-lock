@@ -46,9 +46,9 @@ static void Rotate(float qx, float qy, float qz, float qw, float vx, float vy, f
     QuatMul(ix, iy, iz, iw, cx, cy, cz, cw, ox, oy, oz, &dummy);
 }
 
-// Vehicle RPY (deg) → OpenXR Y-up, -Z forward.
-// +roll lean right → rot Z by -roll. +pitch nose up → rot X by -pitch.
-// +yaw nose right → rot Y by -yaw.
+// Vehicle RPY (deg) -> OpenXR Y-up, -Z forward.
+// +roll lean right -> rot Z by -roll. +pitch nose up -> rot X by -pitch.
+// +yaw nose right -> rot Y by -yaw.
 static void EulerDegToQuat(float rollDeg, float pitchDeg, float yawDeg,
                            float* qx, float* qy, float* qz, float* qw) {
     const float x = -pitchDeg * 3.14159265358979323846f / 180.0f;
@@ -123,7 +123,7 @@ static bool ParseFloatField(const char* json, const char* key, float* out) {
     p = strchr(p, ':');
     if (!p) return false;
     *out = strtof(p + 1, nullptr);
-    return false;
+    return true;
 }
 
 static bool TryLoadGeometryFile(const char* path, float* eyeX, float* eyeY, float* eyeZ) {
