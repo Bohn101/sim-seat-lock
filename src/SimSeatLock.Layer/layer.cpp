@@ -1,13 +1,13 @@
-// SimSeatLock.Layer — thin OpenXR API layer (mbucchia template pattern,
-// not OXRMC). Intercepts xrLocateViews only.
-//
-// Increment: identity passthrough + write Local\SimSeatLock.Game.v1.
-// When Rig.v1 Armed != 0, apply T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd.
+// SimSeatLock.Layer — thin OpenXR API layer (Khronos loader interface v1).
+// Writes Local\\SimSeatLock.Game.v1 on negotiate + CreateInstance + xrLocateViews.
+// Log: publish\\layer\\layer.log
 
 #include "openxr_min.h"
 #include "shm.h"
 #include "math.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <windows.h>
 
@@ -23,16 +23,72 @@ struct LayerState {
     SharedMemory shm;
     float eyeX = 0.f;
     float eyeY = 1.10f;
-    float eyeZ = 0.f;
+    float eyeZ = 0.27f;
     bool geometryLoaded = false;
 };
 
 LayerState g;
 
+void Log(const char* fmt, ...) {
+    char path[MAX_PATH]{};
+    HMODULE self = nullptr;
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCSTR>(&Log), &self);
+    if (self) GetModuleFileNameA(self, path, MAX_PATH);
+    char* slash = strrchr(path, '\\');
+    if (slash) {
+        slash[1] = 0;
+        strcat_s(path, "layer.log");
+    } else {
+        strcpy_s(path, "C:\\Users\\Bohnster\\sim-seat-lock\\publish\\layer\\layer.log");
+    }
+    FILE* f = nullptr;
+    fopen_s(&f, path, "a");
+    if (!f) return;
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d ", st.wYear, st.wMonth, st.wDay,
+            st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+
 void EnsureGeometry() {
     if (g.geometryLoaded) return;
     LoadGeometry(&g.eyeX, &g.eyeY, &g.eyeZ);
     g.geometryLoaded = true;
+}
+
+void WriteAlive(int32_t space, int32_t views, const XrView* xrViews, uint32_t n) {
+    GameBlock game{};
+    game.Flags = RigFlags_GameLive;
+    game.SpaceType = space;
+    game.ViewCount = views;
+    game.Lqw = 1.f;
+    game.Rqw = 1.f;
+    if (xrViews && n >= 1) {
+        game.Lpx = xrViews[0].pose.position.x;
+        game.Lpy = xrViews[0].pose.position.y;
+        game.Lpz = xrViews[0].pose.position.z;
+        game.Lqx = xrViews[0].pose.orientation.x;
+        game.Lqy = xrViews[0].pose.orientation.y;
+        game.Lqz = xrViews[0].pose.orientation.z;
+        game.Lqw = xrViews[0].pose.orientation.w;
+    }
+    if (xrViews && n >= 2) {
+        game.Rpx = xrViews[1].pose.position.x;
+        game.Rpy = xrViews[1].pose.position.y;
+        game.Rpz = xrViews[1].pose.position.z;
+        game.Rqx = xrViews[1].pose.orientation.x;
+        game.Rqy = xrViews[1].pose.orientation.y;
+        game.Rqz = xrViews[1].pose.orientation.z;
+        game.Rqw = xrViews[1].pose.orientation.w;
+    }
+    g.shm.WriteGame(game);
 }
 
 XrResult XRAPI_CALL LayerLocateViews(XrSession session,
@@ -42,61 +98,30 @@ XrResult XRAPI_CALL LayerLocateViews(XrSession session,
                                      uint32_t* viewCountOutput,
                                      XrView* views) {
     if (!g.nextLocateViews) return XR_ERROR_FUNCTION_UNSUPPORTED;
-
     const XrResult result = g.nextLocateViews(session, viewLocateInfo, viewState, viewCapacityInput,
                                               viewCountOutput, views);
     if (result < 0) return result;
     if (!viewCountOutput || !views) return result;
-
     const uint32_t n = *viewCountOutput;
     if (viewCapacityInput == 0) return result;
-
     EnsureGeometry();
-
     RigBlock rig{};
     const bool haveRig = g.shm.TryReadRig(&rig);
     const bool armed = haveRig && rig.Armed != 0;
     const float eyeX = haveRig ? rig.EyeX : g.eyeX;
     const float eyeY = haveRig ? rig.EyeY : g.eyeY;
     const float eyeZ = haveRig ? rig.EyeZ : g.eyeZ;
-
     if (armed && n > 0) {
-        for (uint32_t i = 0; i < n; ++i) {
+        for (uint32_t i = 0; i < n; ++i)
             views[i].pose = ApplyCompensate(views[i].pose, rig, eyeX, eyeY, eyeZ);
-        }
     }
-
-    GameBlock game{};
-    game.Flags = RigFlags_GameLive;
-    game.SpaceType = viewLocateInfo ? static_cast<int32_t>(viewLocateInfo->viewConfigurationType) : 0;
-    game.ViewCount = static_cast<int32_t>(n);
-    if (n >= 1) {
-        game.Lpx = views[0].pose.position.x;
-        game.Lpy = views[0].pose.position.y;
-        game.Lpz = views[0].pose.position.z;
-        game.Lqx = views[0].pose.orientation.x;
-        game.Lqy = views[0].pose.orientation.y;
-        game.Lqz = views[0].pose.orientation.z;
-        game.Lqw = views[0].pose.orientation.w;
-    } else {
-        game.Lqw = 1.f;
-    }
-    if (n >= 2) {
-        game.Rpx = views[1].pose.position.x;
-        game.Rpy = views[1].pose.position.y;
-        game.Rpz = views[1].pose.position.z;
-        game.Rqx = views[1].pose.orientation.x;
-        game.Rqy = views[1].pose.orientation.y;
-        game.Rqz = views[1].pose.orientation.z;
-        game.Rqw = views[1].pose.orientation.w;
-    } else {
-        game.Rqw = 1.f;
-    }
-    g.shm.WriteGame(game);
+    WriteAlive(viewLocateInfo ? static_cast<int32_t>(viewLocateInfo->viewConfigurationType) : 0,
+               static_cast<int32_t>(n), views, n);
     return result;
 }
 
 XrResult XRAPI_CALL LayerDestroyInstance(XrInstance instance) {
+    Log("xrDestroyInstance");
     if (g.nextDestroyInstance) return g.nextDestroyInstance(instance);
     return XR_SUCCESS;
 }
@@ -106,24 +131,30 @@ XrResult XRAPI_CALL LayerGetInstanceProcAddr(XrInstance instance, const char* na
 XrResult XRAPI_CALL LayerCreateApiLayerInstance(const XrInstanceCreateInfo* info,
                                                 const XrApiLayerCreateInfo* apiLayerInfo,
                                                 XrInstance* instance) {
+    Log("CreateApiLayerInstance app=%s",
+        (info && info->applicationInfo.applicationName[0]) ? info->applicationInfo.applicationName : "?");
     if (!info || !apiLayerInfo || !instance) return XR_ERROR_INITIALIZATION_FAILED;
-    if (apiLayerInfo->structType != XR_LOADER_INTERFACE_STRUCT_API_LAYER_CREATE_INFO) {
+    if (apiLayerInfo->structType != XR_LOADER_INTERFACE_STRUCT_API_LAYER_CREATE_INFO)
+        return XR_ERROR_INITIALIZATION_FAILED;
+    if (!apiLayerInfo->nextInfo) {
+        Log("nextInfo is null");
         return XR_ERROR_INITIALIZATION_FAILED;
     }
-    if (!apiLayerInfo->nextInfo) return XR_ERROR_INITIALIZATION_FAILED;
-
     XrApiLayerCreateInfo chain = *apiLayerInfo;
     chain.nextInfo = apiLayerInfo->nextInfo->next;
     g.nextGipa = apiLayerInfo->nextInfo->nextGetInstanceProcAddr;
     g.nextCreate = apiLayerInfo->nextInfo->nextCreateApiLayerInstance;
-    if (!g.nextCreate || !g.nextGipa) return XR_ERROR_INITIALIZATION_FAILED;
-
+    if (!g.nextCreate || !g.nextGipa) {
+        Log("missing nextCreate/nextGipa");
+        return XR_ERROR_INITIALIZATION_FAILED;
+    }
     const XrResult result = g.nextCreate(info, &chain, instance);
+    Log("nextCreate -> %d", (int)result);
     if (result < 0) return result;
-
     g.nextGipa(*instance, "xrLocateViews", reinterpret_cast<PFN_xrVoidFunction*>(&g.nextLocateViews));
     g.nextGipa(*instance, "xrDestroyInstance", reinterpret_cast<PFN_xrVoidFunction*>(&g.nextDestroyInstance));
     EnsureGeometry();
+    WriteAlive(0, 0, nullptr, 0);
     return result;
 }
 
@@ -145,20 +176,28 @@ XrResult XRAPI_CALL LayerGetInstanceProcAddr(XrInstance instance, const char* na
 
 extern "C" XRAPI_ATTR XrResult XRAPI_CALL xrNegotiateLoaderApiLayerInterface(
     const XrNegotiateLoaderInfo* loaderInfo, const char* layerName, XrNegotiateApiLayerRequest* apiLayerRequest) {
+    Log("negotiate layerName=%s minIf=%u maxIf=%u",
+        layerName ? layerName : "(null)",
+        loaderInfo ? loaderInfo->minInterfaceVersion : 0,
+        loaderInfo ? loaderInfo->maxInterfaceVersion : 0);
     if (!loaderInfo || !apiLayerRequest) return XR_ERROR_INITIALIZATION_FAILED;
-    if (layerName && strcmp(layerName, kLayerName) != 0) return XR_ERROR_INITIALIZATION_FAILED;
-    if (loaderInfo->structType != XR_LOADER_INTERFACE_STRUCT_LOADER_INFO) return XR_ERROR_INITIALIZATION_FAILED;
-    if (apiLayerRequest->structType != XR_LOADER_INTERFACE_STRUCT_API_LAYER_REQUEST) {
+    if (layerName && layerName[0] && strcmp(layerName, kLayerName) != 0) {
+        Log("reject unexpected layerName");
         return XR_ERROR_INITIALIZATION_FAILED;
     }
+    if (loaderInfo->structType != XR_LOADER_INTERFACE_STRUCT_LOADER_INFO) return XR_ERROR_INITIALIZATION_FAILED;
+    if (apiLayerRequest->structType != XR_LOADER_INTERFACE_STRUCT_API_LAYER_REQUEST)
+        return XR_ERROR_INITIALIZATION_FAILED;
     if (loaderInfo->minInterfaceVersion > XR_CURRENT_LOADER_API_LAYER_VERSION ||
         loaderInfo->maxInterfaceVersion < XR_CURRENT_LOADER_API_LAYER_VERSION) {
+        Log("interface version mismatch");
         return XR_ERROR_INITIALIZATION_FAILED;
     }
-
     apiLayerRequest->layerInterfaceVersion = XR_CURRENT_LOADER_API_LAYER_VERSION;
     apiLayerRequest->layerApiVersion = XR_CURRENT_API_VERSION;
     apiLayerRequest->getInstanceProcAddr = LayerGetInstanceProcAddr;
     apiLayerRequest->createApiLayerInstance = LayerCreateApiLayerInstance;
+    WriteAlive(0, 0, nullptr, 0);
+    Log("negotiate OK, Game.v1 heartbeat written");
     return XR_SUCCESS;
 }
