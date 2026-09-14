@@ -5,8 +5,8 @@
     "baud": 115200
   },
   "home_key": "Z",
-  "invert": { "roll": false, "pitch": false, "yaw": false },
-  "swap_pitch_roll": false,
+  "invert": { "roll": true, "pitch": true, "yaw": false },
+  "swap_pitch_roll": true,
   "gain_rot_deg": { "roll": 1.0, "pitch": 1.0, "yaw": 0.0 },
   "gain_trans_m": { "surge": 0.0, "sway": 0.0, "heave": 0.0 },
   "steam_vr_seated": true,

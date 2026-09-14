@@ -1,11 +1,11 @@
 {
-  "comment": "CoR is the IMU (platform center). Eyes ~1.0-1.2 m above, 0.27 m aft of CoR. No TV canvas.",
+  "comment": "P5MP CoR = IMU. Eyes 270 mm aft, 1150 mm up. No TV canvas.",
   "eye_forward_m": -0.27,
   "eye_right_m": 0.0,
-  "eye_up_m": 1.1,
+  "eye_up_m": 1.15,
   "imu_to_eye_m": {
     "x": 0.0,
-    "y": 1.1,
+    "y": 1.15,
     "z": 0.27
   }
 }
