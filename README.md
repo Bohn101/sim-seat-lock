@@ -1,6 +1,6 @@
 # SimSeatLock
 
-Seat-lock motion compensation for **Assetto Corsa Evo + PSVR2** (SteamVR OpenXR). Same path works for any native-OpenXR title (AMS2, etc.) once the layer is loaded.
+Seat-lock motion compensation for **Assetto Corsa Evo + PSVR2** (SteamVR OpenXR), same implicit layer for **Le Mans Ultimate** (and any other native-OpenXR title once the layer loads).
 
 Keeps the virtual eyepoint in the bucket while a ProSimu P5 / SimTools platform moves.
 
@@ -10,8 +10,8 @@ T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
 
 `T_cor` is IMU-to-eye from `config/geometry.json`. Preview off = identity (desktop numbers only). The OpenXR layer is what changes the headset.
 
-- **v0.2 (now):** `SimSeatLock.Pose` — Witmotion serial (COM8 / 115200 default), Home (Z), shared-memory publish ≥250 Hz, desktop viz. Dropped = checksum/sync only.
-- **v0 next:** `SimSeatLock.Layer` — identity OpenXR passthrough, write `Game.v1`, then inverse pose about CoR when Rig.v1 `Armed`.
+- **v0.2 (now):** `SimSeatLock.Pose` — Witmotion serial (COM8 / 115200 default), Home (Z), shared-memory publish ≥250 Hz, desktop viz. Dropped = checksum/sync only. Titles: ACE, LMU (`Le Mans Ultimate`), AMS2, iRacing names in `game_processes`.
+- **v0 next:** keep the same layer. LMU proof is `layer.log` negotiate OK + Pose Game LIVE on `Le Mans Ultimate.exe`. See [`docs/LMU.md`](docs/LMU.md).
 - **v1:** predictive pose from the motion-command stream, IMU residual.
 - **Not** SimHub Motion, **not** SRS IntelliComp, **not** FlyPT Mover, **not** SimTools mmap/UDP/serial as a pose source, **not** BuzzteeBear OXRMC as a dependency.
 
@@ -29,7 +29,7 @@ Read [`GROK.md`](GROK.md) first.
 | Channel | When it moves |
 |---|---|
 | SteamVR | Whenever SteamVR is running. Holds last pose when SteamVR exits. |
-| Game OpenXR | When `SimSeatLock.Layer` writes `Local\SimSeatLock.Game.v1` from `xrLocateViews`. Holds last/zero until then. ACE, AMS2, or any OpenXR title. |
+| Game OpenXR | When `SimSeatLock.Layer` writes `Local\SimSeatLock.Game.v1` from `xrLocateViews`. Holds last/zero until then. ACE, LMU, AMS2, or any OpenXR title. |
 | T_rig | Witmotion and/or virtual numeric sliders. Home with **Z**. |
 | Adjusted | Identity while preview is off. `T_cor * inv(T_rig) * inv(T_cor) * T_hmd` when preview is armed. Desktop numbers only — does not change the headset. |
 | Delta | Headset vs adjusted. ~identity with preview off; tracks T_rig rotation with preview on. |
@@ -65,4 +65,4 @@ Edit `publish\config\pose.json` (COM port). Defaults: Witmotion COM8, 115200.
 
 `--list-ports`, `--port COM8`, `--source virtual`, `--help` work from Git CMD / cmd.exe (AttachConsole).
 
-Home and ACE Reset View only with the platform at SimTools neutral and preview **disarmed**. SteamVR Motion Smoothing off while testing. Do not load BuzzteeBear's layer at the same time.
+Home and title Reset View only with the platform at SimTools neutral and preview **disarmed**. SteamVR Motion Smoothing off while testing. Do not load BuzzteeBear's layer at the same time.

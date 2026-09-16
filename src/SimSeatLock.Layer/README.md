@@ -22,6 +22,8 @@ Discovery: HKLM + HKCU Implicit, absolute `library_path`, static CRT (`/MT`).
 `DllMain` logs to `publish/layer/layer.log` as soon as any process LoadLibrarys the DLL.
 Do **not** set `XR_API_LAYER_PATH` or `XR_ENABLE_API_LAYERS`.
 
+Titles: ACE (proven), LMU (same DLL — prove LoadLibrary via `layer.log`). See [`docs/LMU.md`](../../docs/LMU.md).
+
 ## Build / register (Git Bash)
 
 ```bash
@@ -44,6 +46,6 @@ Output:
 1. SteamVR Motion Smoothing off.
 2. Do not load BuzzteeBear OXRMC. Do not UNBLOCK OXRMC.
 3. Start `publish/SimSeatLock.Pose.exe`, platform at SimTools neutral, Home (Z) with compensation disarmed.
-4. SteamVR (layer On) then ACE **Play Assetto Corsa EVO**.
-5. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` + `negotiate OK`, Pose Game LIVE (`valid=True`).
+4. SteamVR (layer On) then ACE **Play Assetto Corsa EVO**, or LMU **Launch Le Mans Ultimate in Steam VR Mode**.
+5. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` + `negotiate OK` for that exe, Pose Game LIVE (`valid=True`).
 6. Arm layer only after Home. Disarm before Reset View / Home.

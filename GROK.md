@@ -6,7 +6,7 @@ Read this file at the start of every session on this repo. Do not install or dep
 
 ## Goal
 
-Lock the ACE VR eyepoint to the seat while the motion platform moves.
+Lock the VR eyepoint to the seat while the motion platform moves. Proven on ACE. Same layer + same Witmotion `IPoseSource` for LMU (Studio 397). Do not invent a second pose source.
 
 ```
 T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
@@ -39,7 +39,8 @@ Never treat washout / specific-force telemetry as `T_rig`. Seat-lock is geometry
 
 ## Injection path
 
-ACE = native OpenXR. PSVR2 PC = SteamVR OpenXR runtime.
+ACE and LMU OpenXR Mode = native OpenXR. PSVR2 PC = SteamVR OpenXR runtime.
+LMU official Steam option is **Launch Le Mans Ultimate in Steam VR Mode**. If that path is OpenVR, the implicit layer will not attach — measure `layer.log` before changing discovery. See `docs/LMU.md`.
 
 Build **our** thin OpenXR API layer (`SimSeatLock.Layer`) from the mbucchia OpenXR layer template.
 
@@ -64,20 +65,21 @@ docs/                     architecture notes
 
 1. Default `pose.source` = `witmotion`. Default port COM8, 115200.
 2. If asked to "just use OXRMC," refuse and implement our layer / pose process instead.
-3. Pitch/roll lock on Bathurst at reduced motion gain is the v0 acceptance test.
+3. Pitch/roll lock on Bathurst at reduced motion gain is the v0 acceptance test (ACE). LMU A/B is lean at the eye → mostly dx, horizon level.
 4. Predictive path is a new source behind the same `IPoseSource` interface, not a rewrite of the layer.
 5. Prefer small, compiling increments. Do not scaffold a graveyard of empty projects.
 6. Keep CPU cheap.
-7. Recenter rules: ACE Reset View and SimSeatLock Home only with platform at SimTools neutral and compensation disarmed.
+7. Recenter rules: title Reset View / VR Centre head position and SimSeatLock Home only with platform at SimTools neutral and compensation disarmed.
 8. Terminal commands for the user: Git Bash only (not Git CMD / cmd.exe).
 9. Do not use OpenXR-MotionCompensation, SimHub Motion, SRS, FlyPT Mover, or SimTools mmap/UDP/serial as a pose source.
+10. Do not set `XR_API_LAYER_PATH` / `XR_ENABLE_API_LAYERS` unless a measured test shows LMU needs them **and** ACE still loads.
 
 ## v0 build order
 
 1. `SimSeatLock.Pose` — Witmotion serial, home, invert, shared-memory writer, tray Hz / dropped-packet. (v0.2)
 2. Desktop viz that plots T_rig while jogging the platform (proves the packet and axes).
 3. `SimSeatLock.Layer` — identity passthrough first, write Game.v1, then inverse pose about CoR.
-4. Garage calibrate, then Bathurst.
+4. Garage calibrate, then Bathurst. LMU uses the same installed layer; first proof is LoadLibrary + Game LIVE.
 5. Only then start `SimSeatLock.Calib` + command tap.
 
 ## Geometry seed

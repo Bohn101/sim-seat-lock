@@ -1,6 +1,6 @@
 # SimSeatLock.Layer
 
-OpenXR API layer loaded into ACE (SteamVR OpenXR runtime).
+OpenXR API layer loaded into ACE / LMU / any native-OpenXR title (SteamVR OpenXR runtime).
 
 ```
 Witmotion → Pose → Local\SimSeatLock.Rig.v1 → layer xrLocateViews → title
@@ -39,10 +39,12 @@ Do not load BuzzteeBear OXRMC at the same time.
 
 `Armed` in Rig.v1 is **Arm layer (headset)** in Pose. Preview checkbox is desktop numbers only.
 
-Home / ACE Reset View only with platform at SimTools neutral and layer disarmed.
+Home / title Reset View only with platform at SimTools neutral and layer disarmed.
 
 ## Proof the DLL loaded
 
 `publish/layer/layer.log` must contain `DllMain PROCESS_ATTACH` and `negotiate OK` after sitting in the car. Pose Game goes LIVE / valid=True.
 
-If the log is missing, ACE never `LoadLibrary`'d the DLL. SteamVR listing the layer is not the same as ACE calling `xrNegotiateLoaderApiLayerInterface`.
+If the log is missing, the title never `LoadLibrary`'d the DLL. SteamVR listing the layer is not the same as the title calling `xrNegotiateLoaderApiLayerInterface`.
+
+LMU: see [`docs/LMU.md`](LMU.md). Official launch is Steam VR Mode. If that path is OpenVR, the layer will not attach — retry OpenXR Mode with the same SteamVR runtime. EAC can strip unofficial layers (`Unable to start the game in VR mode`).

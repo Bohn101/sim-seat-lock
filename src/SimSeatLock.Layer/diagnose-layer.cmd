@@ -34,10 +34,13 @@ if exist "C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim
 if exist "C:\Users\Bohnster\sim-seat-lock\publish\layer\layer.log" (
   echo layer.log last 20 lines:
   powershell -NoProfile -Command "Get-Content -LiteralPath 'C:\Users\Bohnster\sim-seat-lock\publish\layer\layer.log' -Tail 20"
+  echo.
+  echo LMU / ACE attach lines:
+  findstr /I /C:"Le Mans Ultimate" /C:"AssettoCorsa" /C:"negotiate OK" "C:\Users\Bohnster\sim-seat-lock\publish\layer\layer.log"
 ) else (
-  echo layer.log MISSING — ACE never LoadLibrary'd the DLL.
+  echo layer.log MISSING — title never LoadLibrary'd the DLL.
 )
 echo.
-echo If layer.log is still missing after ACE VR: ACE is not chaining Khronos
-echo implicit layers (OpenVR launch, or a loader that skips HKCU/HKLM).
+echo If layer.log is still missing after ACE / LMU VR: the title is not chaining
+echo Khronos implicit layers (OpenVR launch, EAC strip, or a loader that skips HKCU/HKLM).
 exit /b 0
