@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace SimSeatLock.Pose.Tracking;
 
 /// <summary>
-/// Detects ACE / AMS2 / other configured executables. Presence only —
+/// Detects ACE / AMS2 / LMU / other configured executables. Presence only —
 /// it does not invent an OpenXR pose.
 /// </summary>
 public sealed class EngineWatch

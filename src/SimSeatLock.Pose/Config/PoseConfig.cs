@@ -31,7 +31,9 @@ public sealed class PoseConfig
         "assetto_corsa_evo",
         "AMS2AVX",
         "AMS2",
-        "iRacingSim64DX11"
+        "iRacingSim64DX11",
+        "Le Mans Ultimate",
+        "LeMansUltimate"
     ];
 
     [JsonIgnore]
