@@ -12,6 +12,14 @@ reg query "HKCU\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit" 2>nul
 echo Implicit HKLM:
 reg query "HKLM\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit" 2>nul
 echo.
+powershell -NoProfile -Command ^
+  "$cu=(Get-ItemProperty -Path 'HKCU:\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit' -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Name -like '*sim_seat_lock*' }; " ^
+  "$lm=(Get-ItemProperty -Path 'HKLM:\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit' -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Name -like '*sim_seat_lock*' }; " ^
+  "if ($cu -and $lm) { Write-Host 'DUPLICATE: same layer in HKCU and HKLM. SteamVR will list it twice. Run install-layer.cmd to keep HKLM only.' } " ^
+  "elseif ($lm) { Write-Host 'OK: SimSeatLock registered in HKLM only.' } " ^
+  "elseif ($cu) { Write-Host 'WARN: SimSeatLock is HKCU only. ACE may ignore it. Run install-layer.cmd.' } " ^
+  "else { Write-Host 'MISSING: SimSeatLock not in either Implicit hive.' }"
+echo.
 echo User XR_* env (these must NOT be set):
 reg query "HKCU\Environment" /v XR_API_LAYER_PATH 2>nul
 reg query "HKCU\Environment" /v XR_ENABLE_API_LAYERS 2>nul
