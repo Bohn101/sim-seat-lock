@@ -11,20 +11,24 @@ Not OXRMC. Not SimHub / SRS / FlyPT / SimTools pose.
 
 ## Load
 
-Implicit registry, DWORD 0 = enabled. Working layers live in **HKLM** (ACE may ignore HKCU).
+One implicit registration. DWORD 0 = enabled. Canonical hive is **HKLM**
+(ACE ignores HKCU; Toolkit / OXRMC also use HKLM).
 
 ```
 HKLM\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit
-HKCU\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit
 ```
 
 Value name = absolute path of
 
 `C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim_seat_lock.json`
 
-`install-layer.cmd` writes an **absolute** `library_path` into that JSON and registers both hives (UAC for HKLM).
+`install-layer.cmd` writes an **absolute** `library_path` and enables HKLM.
+It **deletes** the same JSON from HKCU. Writing both hives made SteamVR list
+the layer twice and the loader could negotiate it twice.
 
-Disable: `DISABLE_XR_APILAYER_NOVENDOR_sim_seat_lock=1`
+Disable without deleting files: `disable-layer.cmd` (DWORD 1 both hives).
+
+Disable env: `DISABLE_XR_APILAYER_NOVENDOR_sim_seat_lock=1`
 
 **Do not set `XR_API_LAYER_PATH` or `XR_ENABLE_API_LAYERS`.** `XR_API_LAYER_PATH` replaces default explicit-layer search and has taken Steam-launched ACE to a flat monitor.
 
@@ -47,4 +51,4 @@ Home / title Reset View only with platform at SimTools neutral and layer disarme
 
 If the log is missing, the title never `LoadLibrary`'d the DLL. SteamVR listing the layer is not the same as the title calling `xrNegotiateLoaderApiLayerInterface`.
 
-LMU: see [`docs/LMU.md`](LMU.md). Official launch is Steam VR Mode. If that path is OpenVR, the layer will not attach — retry OpenXR Mode with the same SteamVR runtime. EAC can strip unofficial layers (`Unable to start the game in VR mode`).
+LMU: see [`docs/LMU.md`](LMU.md). EAC blocks this DLL on `start_protected_game`. Offline proof is `Le Mans Ultimate.exe` +VR.

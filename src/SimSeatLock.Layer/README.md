@@ -18,11 +18,13 @@ about the CoR in `geometry.json` / Rig block `EyeX/Y/Z`.
 
 Preview in Pose is still desktop-only. Use **Arm layer (headset)** to set `Armed`.
 
-Discovery: HKLM + HKCU Implicit, absolute `library_path`, static CRT (`/MT`).
+Discovery: **HKLM only**, absolute `library_path`, static CRT (`/MT`).
+Do not also register HKCU — SteamVR then shows two identical rows.
 `DllMain` logs to `publish/layer/layer.log` as soon as any process LoadLibrarys the DLL.
 Do **not** set `XR_API_LAYER_PATH` or `XR_ENABLE_API_LAYERS`.
 
-Titles: ACE (proven), LMU (same DLL — prove LoadLibrary via `layer.log`). See [`docs/LMU.md`](../../docs/LMU.md).
+Titles: ACE (proven), LMU (same DLL; EAC blocks it on the protected launcher).
+See [`docs/LMU.md`](../../docs/LMU.md).
 
 ## Build / register (Git Bash)
 
@@ -41,11 +43,13 @@ Output:
 
 `publish\\layer\\XR_APILAYER_NOVENDOR_sim_seat_lock.dll`
 
+Disable for LMU online: `cmd.exe //c src/SimSeatLock.Layer/disable-layer.cmd`
+
 ## Test
 
 1. SteamVR Motion Smoothing off.
 2. Do not load BuzzteeBear OXRMC. Do not UNBLOCK OXRMC.
 3. Start `publish/SimSeatLock.Pose.exe`, platform at SimTools neutral, Home (Z) with compensation disarmed.
-4. SteamVR (layer On) then ACE **Play Assetto Corsa EVO**, or LMU **Launch Le Mans Ultimate in Steam VR Mode**.
+4. SteamVR (one SimSeatLock row, On) then ACE **Play Assetto Corsa EVO**, or LMU offline `Le Mans Ultimate.exe` +VR.
 5. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` + `negotiate OK` for that exe, Pose Game LIVE (`valid=True`).
 6. Arm layer only after Home. Disarm before Reset View / Home.
