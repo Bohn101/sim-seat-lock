@@ -1,27 +1,40 @@
-Subject: Please allow-list OpenXR API layer XR_APILAYER_NOVENDOR_sim_seat_lock (SimSeatLock)
+Subject: EAC allow-list request — OpenXR layer XR_APILAYER_NOVENDOR_sim_seat_lock (SimSeatLock)
 
 Hi Studio 397 / LMU VR,
 
-Please consider an Easy Anti-Cheat exception for one implicit OpenXR
-API layer, the same class of exception granted to OpenXR Toolkit.
+Please add an Easy Anti-Cheat exception for one implicit OpenXR API layer.
+This is the same class of exception granted to OpenXR Toolkit in late 2025.
 
+Product:     SimSeatLock
 Layer name:  XR_APILAYER_NOVENDOR_sim_seat_lock
 DLL:         XR_APILAYER_NOVENDOR_sim_seat_lock.dll
-Project:     https://github.com/Bohn101/sim-seat-lock
-What it does: motion-rig seat-lock. It intercepts xrLocateViews and
-applies T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd so the
-eyepoint stays in the bucket while a 6DOF platform moves. It does not
-read or write game memory, telemetry, inputs, or files under the LMU
-install. Pose comes from a serial IMU in a separate process.
+What it is:  a thin Khronos OpenXR API layer that keeps the VR eyepoint
+             locked to the seat while a motion platform moves.
 
-Reproduction with the layer enabled (Steam VR Mode / OpenXR Mode):
-  "Unable to start the game in VR mode. Check the log for more info."
-With the layer disabled, official VR starts.
+SimSeatLock is motion compensation for sim racing and flight in VR. It
+reads chassis pose from a seat-mounted IMU (one sensor today; commanded
+platform pose is the next source behind the same interface) and applies
 
-Hardware: PSVR2 + official PC adapter, SteamVR OpenXR runtime
-  C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json
+  T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
 
-Happy to provide a signed build hash and a short description for the
-Epic allow-list, same route used for OpenXR Toolkit in Dec 2025.
+inside xrLocateViews. Head motion relative to the bucket is unchanged.
+Platform pitch, roll, and heave are subtracted about a configured center
+of rotation.
+
+It does not read or write LMU memory, telemetry, inputs, or files under
+the game install. The pose process is separate. The layer is identity
+until the user arms it. SteamVR remains the OpenXR runtime
+(steamxr_win64.json). No OpenComposite, no replaced openvr_api.dll.
+
+Measured on this machine:
+  PSVR2 + official PC adapter, SteamVR OpenXR
+  Layer On + Steam Play / start_protected_game
+    → "Unable to start the game in VR mode. Check the log for more info."
+  Layer Off + Steam Play → official VR starts
+  Layer On + Le Mans Ultimate.exe +VR (no EAC) → VR starts, layer.log
+    DllMain PROCESS_ATTACH + negotiate OK
+
+Happy to send a signed build and SHA-256 of the DLL for the Epic list.
 
 SteamID: 76561198028104377
+Repo (can stay private; hash on request): github.com/Bohn101/sim-seat-lock
