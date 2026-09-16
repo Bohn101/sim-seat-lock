@@ -7,44 +7,56 @@ No second pose source. Do not load OXRMC / OpenXR Toolkit / OpenComposite.
 T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
 ```
 
-## Where the layer lives
+## Git Bash only (do not use Git CMD)
 
-Files (only copy that should exist):
-
-`C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim_seat_lock.dll`
-`C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim_seat_lock.json`
-
-Install writes **HKLM** Implicit, DWORD `0` = enabled:
-
-`HKLM\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit`
-value name = absolute path of that JSON.
-
-Older `install-layer.cmd` also wrote **HKCU**. SteamVR then lists the **same**
-layer twice ("2 ACTIVE"). The Khronos loader can negotiate the DLL twice.
-SteamVR Off only writes the hive it can touch (usually HKCU), so the HKLM row
-looks stuck On. That is not two installs and not GitHub desync.
-
-Fix:
+Git CMD treats `cmd.exe //c` as a new empty shell — you only see the Windows
+banner and no `OK: SimSeatLock registered`. Open **Git Bash** and paste:
 
 ```bash
 cd /c/Users/Bohnster/sim-seat-lock
+git pull origin main
 cmd.exe //c src/SimSeatLock.Layer/install-layer.cmd
 cmd.exe //c src/SimSeatLock.Layer/diagnose-layer.cmd
 ```
 
-`install-layer.cmd` now enables HKLM and **deletes** the HKCU duplicate.
-Disable for LMU online without uninstalling files:
+Allow the UAC prompt. You must see `Registered HKLM` and either
+`OK: SimSeatLock registered in HKLM only.` or the Implicit HKLM query listing
+the publish JSON. If you only see `Microsoft Windows [Version ...]` the script
+did not run.
+
+## Where the layer lives
+
+One DLL, one JSON:
+
+`C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim_seat_lock.dll`
+`C:\Users\Bohnster\sim-seat-lock\publish\layer\XR_APILAYER_NOVENDOR_sim_seat_lock.json`
+
+`build\layer\Release\*.recipe` / `.iobj` / `.ipdb` are MSBuild junk, not a
+second install. `src\SimSeatLock.Layer\*.json` is the source template.
+
+Install writes **HKLM** Implicit, DWORD `0` = enabled, DWORD `1` = disabled:
+
+```
+regedit → HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit
+```
+
+Value **name** = the full JSON path above. Value **data** = `0x00000000` (On).
+
+HKLM = whole PC. HKCU = this Windows user only. SteamVR lists **both** hives,
+so the same JSON in both = two identical rows. New `install-layer.cmd` enables
+HKLM and **deletes** the HKCU copy so SteamVR shows one line.
+
+Disable for LMU online without deleting files:
 
 ```bash
+cd /c/Users/Bohnster/sim-seat-lock
 cmd.exe //c src/SimSeatLock.Layer/disable-layer.cmd
 ```
 
 ## Process names (EngineWatch)
 
-Task Manager on v1.4150 shows parent `Le Mans Ultimate` and child
-`Le Mans Ultimate v1.4150`. Seed `game_processes` with `Le Mans Ultimate`
-and `LeMansUltimate`. Do not add `VR Server`. Do not wipe COM8 or
-geometry −0.27 / 1.15.
+`Le Mans Ultimate` and `LeMansUltimate`. Do not add `VR Server`.
+Do not wipe COM8 or geometry −0.27 / 1.15.
 
 ## Launch
 
@@ -52,71 +64,48 @@ Official Steam option: **Launch Le Mans Ultimate in Steam VR Mode**.
 Not **Play Le Mans Ultimate** (pancake).
 
 **OpenXR Mode** is the ACE-shaped path (Khronos loader + implicit layers +
-SteamVR runtime `steamxr_win64.json`). If Steam VR Mode is OpenVR-only,
-`layer.log` will have no `Le Mans Ultimate.exe` attach.
+SteamVR runtime `steamxr_win64.json`).
 
 Do not set `XR_API_LAYER_PATH` / `XR_ENABLE_API_LAYERS`.
 Do not replace `openvr_api.dll`. Do not use OpenComposite.
 
-## EAC (why VR dies with the layer On)
+## EAC vs DLC crash
 
-LMU since 1.2 launches through Easy Anti-Cheat
-(`start_protected_game.exe`). EAC inspects DLLs loaded into the game
-process. An implicit OpenXR layer is `LoadLibrary`'d by the title when it
-creates an OpenXR instance. Unsigned / not-allow-listed layers abort VR
-before the game log is written:
+Protected Steam launch + unofficial layer → `Unable to start the game in VR mode`
+and often a **blank** game log. That is EAC refusing `LoadLibrary`.
 
-`Unable to start the game in VR mode. Check the log for more info.`
+`Le Mans Ultimate.exe +VR` skips EAC. If that path dies at ~4 s with BugSplat
+and the trace says:
 
-Blank game log = crash before the engine logger starts. That matches EAC
-refusing the layer, not a missing SimSeatLock bug.
+```
+DLC file DLC Organiser.JSON not found in Core\Shared\DLC.mas
+FATAL!!!
+[ELS] Fatal Error 11
+```
 
-OpenXR Toolkit was blocked the same way, then S397 + Epic **allow-listed
-that specific product**. Our DLL is `XR_APILAYER_NOVENDOR_sim_seat_lock`.
-Renaming the layer or the exe does not get an EAC exception. Code signing
-helps SmartScreen, not EAC. There is no public self-serve whitelist; the
-Toolkit path was a studio ticket to Epic.
+that is a **broken/incomplete install after the reinstall**, not the layer.
+Steam → Le Mans Ultimate → Properties → Installed Files → Verify integrity.
+Then launch once from Steam (pancake is fine) until the menu appears. Only
+then retry `+VR`.
 
-v1.4 (Jul 2026) added native OpenXR + FOV scaling. v1.4.1.5 (15 Sep 2026)
-updated the EAC module again. After a full LMU reinstall you must run the
-EAC install bat under
-`...\Le Mans Ultimate\EasyAntiCheat` or Steam will show
-"Easy Anti-Cheat is not installed."
-
-Official offline (no EAC, no online): launch `Le Mans Ultimate.exe` from
-the game folder, or a shortcut with `+VR`.
+Official offline (no EAC, no online):
 https://guide.lemansultimate.com/hc/en-gb/articles/14590657733903-How-do-I-run-the-game-without-Easy-Anti-Cheat-EAC
 
-## SimTools / Sim Commander vs the layer
+## SimTools / Toolkit
 
-SimTools and Sim Commander talk to the platform over their own protocol.
-They are not injected into `Le Mans Ultimate.exe`. EAC does not care.
-SimSeatLock.Layer **is** injected. That is why motion hardware works and
-the OpenXR layer does not, on the same PC.
-
-## OpenXR Toolkit / OXRMC
-
-SimSeatLock does **not** need OpenXR Toolkit. Toolkit is a separate layer
-(sharpen / NIS / foveated / crop FOV).
-
-OXRMC (BuzzteeBear) also does **not** need Toolkit. OXRMC is itself an
-OpenXR layer. Do not load OXRMC at the same time as SimSeatLock.
-
-ReShade / replaced `openvr_api.dll` / OpenComposite are the same EAC class
-as unofficial layers: blocked unless allow-listed, or only safe on the
-offline `Le Mans Ultimate.exe` path.
+SimTools does not inject into the game process. The OpenXR layer does.
+SimSeatLock does **not** need OpenXR Toolkit. Do not load OXRMC with us.
 
 ## Proof order
 
-1. `install-layer.cmd` so SteamVR shows **one** SimSeatLock row, On.
-2. Pose on, Arm off, SteamVR smoothing off, OXRMC off.
-3. Offline: shortcut `"...\Le Mans Ultimate\Le Mans Ultimate.exe" +VR`.
-4. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` +
-   `exe=...\Le Mans Ultimate.exe` + `negotiate OK`. Pose Game LIVE.
-5. A/B lean: eye mostly `dx`, horizon level.
-6. Online Steam VR Mode with layer On will keep failing until S397/Epic
-   allow-list this DLL. Use `disable-layer.cmd` for online pancake-free VR
-   without compensation.
+1. Git Bash install + diagnose. SteamVR shows **one** SimSeatLock row, On.
+2. Pose on, Arm off, smoothing off, OXRMC off.
+3. Game must reach the main menu from Steam at least once after verify.
+4. Offline `Le Mans Ultimate.exe +VR`.
+5. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` +
+   `Le Mans Ultimate.exe` + `negotiate OK`. Pose Game LIVE.
+6. A/B lean. Online Steam VR Mode with layer On stays blocked until an
+   Epic/S397 allow-list. Use `disable-layer.cmd` for online VR without lock.
 
 ## Recenter
 
