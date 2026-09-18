@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SimSeatLock.Pose.Config;
 using SimSeatLock.Pose.Publish;
 using SimSeatLock.Pose.Tracking;
@@ -26,6 +27,7 @@ public sealed class MainForm : Form
     readonly TextBox _deltaBox;
     readonly TextBox _rigBox;
     readonly Label _status;
+    readonly Label _lampImu, _lampSteam, _lampLayer, _lampEngine;
     readonly NumericUpDown _roll, _pitch, _yaw, _surge, _sway, _heave;
     readonly System.Windows.Forms.Timer _ui;
     readonly Thread _pubThread;
@@ -33,14 +35,15 @@ public sealed class MainForm : Form
     volatile bool _previewArmed;
     string _homeNote = "";
 
-    TextBox _srcBox = null!;
-    TextBox _portBox = null!;
+    ComboBox _srcBox = null!;
+    ComboBox _portBox = null!;
     NumericUpDown _baudBox = null!;
     CheckBox _invR = null!, _invP = null!, _invY = null!, _swap = null!, _seated = null!;
     NumericUpDown _gRoll = null!, _gPitch = null!, _gYaw = null!;
     NumericUpDown _gSurge = null!, _gSway = null!, _gHeave = null!;
     NumericUpDown _eyeF = null!, _eyeR = null!, _eyeU = null!;
     TextBox _gamesBox = null!;
+    Label _openXrEye = null!;
 
     public MainForm(
         PoseConfig cfg,
@@ -67,23 +70,26 @@ public sealed class MainForm : Form
         Text = $"SimSeatLock.Pose v{Program.Version}";
         StartPosition = FormStartPosition.Manual;
         Location = new Point(20, 20);
-        ClientSize = new Size(1100, 760);
-        MinimumSize = new Size(1000, 700);
+        ClientSize = new Size(1180, 820);
+        MinimumSize = new Size(1040, 720);
         KeyPreview = true;
         Font = new Font("Segoe UI", 9f);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         var live = new TabPage("Live");
         var config = new TabPage("Config");
+        var help = new TabPage("Help");
         tabs.TabPages.Add(live);
         tabs.TabPages.Add(config);
+        tabs.TabPages.Add(help);
 
         _status = new Label
         {
             Dock = DockStyle.Bottom,
-            Height = 24,
+            Height = 36,
+            AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(6, 0, 6, 0)
+            Padding = new Padding(8, 6, 8, 8)
         };
 
         Controls.Add(tabs);
@@ -94,12 +100,12 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             WrapContents = true,
-            Padding = new Padding(6, 4, 6, 4)
+            Padding = new Padding(6, 4, 6, 2)
         };
         _preview = new CheckBox
         {
             AutoSize = true,
-            Text = "Arm layer / Preview inv(T_rig)  -  off = identity (headset unchanged)",
+            Text = "Arm Layer / Preview inv(T_rig) — Off = identity",
             Checked = _previewArmed
         };
         _preview.CheckedChanged += (_, _) =>
@@ -107,79 +113,124 @@ public sealed class MainForm : Form
             _previewArmed = _preview.Checked;
             _cfg.PreviewArmed = _previewArmed;
         };
-        _home = new Button { Text = "Home T_rig (Z)", AutoSize = true };
+        _home = new Button { Text = "Home IMU (Z)", AutoSize = true };
         _home.Click += (_, _) => TryHome();
-        _zeroVirtual = new Button { Text = "Zero virtual", AutoSize = true };
+        var homeTip = new ToolTip();
+        homeTip.SetToolTip(_home, "Zero the IMU offset at SimTools neutral. Not actuator home.");
+        _zeroVirtual = new Button { Text = "Zero Virtual", AutoSize = true };
         _zeroVirtual.Click += (_, _) =>
         {
             _pose.ResetVirtual();
             _roll.Value = 0; _pitch.Value = 0; _yaw.Value = 0;
             _surge.Value = 0; _sway.Value = 0; _heave.Value = 0;
         };
+        _lampImu = MakeLamp("IMU");
+        _lampSteam = MakeLamp("SteamVR");
+        _lampLayer = MakeLamp("Layer");
+        _lampEngine = MakeLamp("Engine");
         top.Controls.Add(_preview);
         top.Controls.Add(_home);
         top.Controls.Add(_zeroVirtual);
+        top.Controls.Add(_lampImu);
+        top.Controls.Add(_lampSteam);
+        top.Controls.Add(_lampLayer);
+        top.Controls.Add(_lampEngine);
 
-        var grid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 2,
-            Padding = new Padding(4)
-        };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         _steamBox = MakeBox();
         _gameBox = MakeBox();
         _adjBox = MakeBox();
         _deltaBox = MakeBox();
-        grid.Controls.Add(_steamBox, 0, 0);
-        grid.Controls.Add(_gameBox, 1, 0);
-        grid.Controls.Add(_adjBox, 0, 1);
-        grid.Controls.Add(_deltaBox, 1, 1);
-
-        var bottom = new TableLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 248,
-            ColumnCount = 2,
-            Padding = new Padding(4)
-        };
-        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
-        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
         _rigBox = MakeBox();
-        bottom.Controls.Add(_rigBox, 0, 0);
 
-        var virt = new GroupBox { Text = "Virtual numeric T_rig overlay", Dock = DockStyle.Fill };
+        var splitLeft = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal,
+            SplitterWidth = 8
+        };
+        splitLeft.Panel1.Controls.Add(_steamBox);
+        splitLeft.Panel2.Controls.Add(_adjBox);
+
+        var splitRight = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal,
+            SplitterWidth = 8
+        };
+        splitRight.Panel1.Controls.Add(_gameBox);
+        splitRight.Panel2.Controls.Add(_deltaBox);
+
+        var splitMid = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterWidth = 8
+        };
+        splitMid.Panel1.Controls.Add(splitLeft);
+        splitMid.Panel2.Controls.Add(splitRight);
+
+        var virt = new GroupBox { Text = "Virtual Numeric T_rig Overlay", Dock = DockStyle.Fill };
         var virtGrid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
-            RowCount = 3,
-            Padding = new Padding(6)
+            RowCount = 4,
+            Padding = new Padding(8, 8, 8, 8)
         };
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        _roll = AddNud(virtGrid, 0, 0, "roll deg", -180, 180, 0.05m, 2);
-        _surge = AddNud(virtGrid, 2, 0, "surge m", -2, 2, 0.001m, 4);
-        _pitch = AddNud(virtGrid, 0, 1, "pitch deg", -180, 180, 0.05m, 2);
-        _sway = AddNud(virtGrid, 2, 1, "sway m", -2, 2, 0.001m, 4);
-        _yaw = AddNud(virtGrid, 0, 2, "yaw deg", -180, 180, 0.05m, 2);
-        _heave = AddNud(virtGrid, 2, 2, "heave m", -2, 2, 0.001m, 4);
+        virtGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        virtGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        virtGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        virtGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _roll = AddNud(virtGrid, 0, 0, "Roll deg", -180, 180, 0.05m, 2);
+        _surge = AddNud(virtGrid, 2, 0, "Surge m", -2, 2, 0.001m, 4);
+        _pitch = AddNud(virtGrid, 0, 1, "Pitch deg", -180, 180, 0.05m, 2);
+        _sway = AddNud(virtGrid, 2, 1, "Sway m", -2, 2, 0.001m, 4);
+        _yaw = AddNud(virtGrid, 0, 2, "Yaw deg", -180, 180, 0.05m, 2);
+        _heave = AddNud(virtGrid, 2, 2, "Heave m", -2, 2, 0.001m, 4);
         foreach (var n in new[] { _roll, _pitch, _yaw, _surge, _sway, _heave })
             n.ValueChanged += (_, _) => PushVirtual();
         virt.Controls.Add(virtGrid);
-        bottom.Controls.Add(virt, 1, 0);
 
-        live.Controls.Add(grid);
-        live.Controls.Add(bottom);
+        var splitBot = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterWidth = 8
+        };
+        splitBot.Panel1.Controls.Add(_rigBox);
+        splitBot.Panel2.Controls.Add(virt);
+
+        var splitOuter = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal,
+            SplitterWidth = 8
+        };
+        splitOuter.Panel1.Controls.Add(splitMid);
+        splitOuter.Panel2.Controls.Add(splitBot);
+
+        live.Controls.Add(splitOuter);
         live.Controls.Add(top);
 
+        Shown += (_, _) =>
+        {
+            try
+            {
+                splitOuter.SplitterDistance = Math.Max(280, splitOuter.Height - 280);
+                splitMid.SplitterDistance = Math.Max(200, splitMid.Width / 2);
+                splitLeft.SplitterDistance = Math.Max(120, splitLeft.Height / 2);
+                splitRight.SplitterDistance = Math.Max(120, splitRight.Height / 2);
+                splitBot.SplitterDistance = Math.Max(200, (int)(splitBot.Width * 0.62));
+            }
+            catch { /* first-layout race */ }
+        };
+
         BuildConfigTab(config);
+        BuildHelpTab(help);
 
         _ui = new System.Windows.Forms.Timer { Interval = 50 };
         _ui.Tick += (_, _) => RefreshLive();
@@ -194,16 +245,49 @@ public sealed class MainForm : Form
         _pubThread.Start();
     }
 
+    static Label MakeLamp(string name) => new()
+    {
+        AutoSize = true,
+        Text = "● " + name,
+        Padding = new Padding(10, 6, 4, 0),
+        ForeColor = Color.Gray
+    };
+
+    static void SetLamp(Label lamp, bool on, string extra)
+    {
+        lamp.ForeColor = on ? Color.ForestGreen : Color.Firebrick;
+        lamp.Text = (on ? "● " : "● ") + extra;
+    }
+
+    void BuildHelpTab(TabPage page)
+    {
+        var box = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            Dock = DockStyle.Fill,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = false,
+            Font = new Font("Consolas", 9.5f),
+            Text = HelpText.Body.Replace("\n", "\r\n"),
+            BorderStyle = BorderStyle.None,
+            BackColor = SystemColors.Window
+        };
+        page.Padding = new Padding(8);
+        page.Controls.Add(box);
+    }
+
     void BuildConfigTab(TabPage page)
     {
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 16,
-            Padding = new Padding(10)
+            RowCount = 18,
+            Padding = new Padding(10),
+            AutoScroll = true
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         int r = 0;
@@ -212,31 +296,51 @@ public sealed class MainForm : Form
             root.Controls.Add(new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left }, 0, r);
         }
 
-        LabelRow("source");
-        _srcBox = new TextBox { Text = _cfg.Source, Dock = DockStyle.Fill };
+        LabelRow("Source Mode");
+        _srcBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = DockStyle.Left,
+            Width = 220
+        };
+        _srcBox.Items.AddRange(["witmotion", "virtual"]);
+        var src = (_cfg.Source ?? "witmotion").Trim().ToLowerInvariant();
+        _srcBox.SelectedItem = src is "virtual" or "witmotion" ? src : "witmotion";
         root.Controls.Add(_srcBox, 1, r++);
 
-        LabelRow("witmotion.port");
-        _portBox = new TextBox { Text = _cfg.Witmotion.Port, Dock = DockStyle.Fill };
-        root.Controls.Add(_portBox, 1, r++);
+        LabelRow("WitMotion Port");
+        _portBox = new ComboBox { Dock = DockStyle.Left, Width = 220 };
+        RefreshPorts();
+        if (!string.IsNullOrWhiteSpace(_cfg.Witmotion.Port))
+        {
+            if (!_portBox.Items.Contains(_cfg.Witmotion.Port))
+                _portBox.Items.Insert(0, _cfg.Witmotion.Port);
+            _portBox.Text = _cfg.Witmotion.Port;
+        }
+        var refreshPorts = new Button { Text = "Refresh Ports", AutoSize = true };
+        refreshPorts.Click += (_, _) => RefreshPorts();
+        var portRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        portRow.Controls.Add(_portBox);
+        portRow.Controls.Add(refreshPorts);
+        root.Controls.Add(portRow, 1, r++);
 
-        LabelRow("witmotion.baud");
+        LabelRow("WitMotion Baud");
         _baudBox = new NumericUpDown { Minimum = 9600, Maximum = 921600, Value = Math.Clamp(_cfg.Witmotion.Baud, 9600, 921600), Dock = DockStyle.Left, Width = 120 };
         root.Controls.Add(_baudBox, 1, r++);
 
-        LabelRow("invert");
+        LabelRow("Invert");
         var inv = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        _invR = new CheckBox { Text = "roll", AutoSize = true, Checked = _cfg.Invert.Roll };
-        _invP = new CheckBox { Text = "pitch", AutoSize = true, Checked = _cfg.Invert.Pitch };
-        _invY = new CheckBox { Text = "yaw", AutoSize = true, Checked = _cfg.Invert.Yaw };
+        _invR = new CheckBox { Text = "Roll", AutoSize = true, Checked = _cfg.Invert.Roll };
+        _invP = new CheckBox { Text = "Pitch", AutoSize = true, Checked = _cfg.Invert.Pitch };
+        _invY = new CheckBox { Text = "Yaw", AutoSize = true, Checked = _cfg.Invert.Yaw };
         inv.Controls.AddRange(new Control[] { _invR, _invP, _invY });
         root.Controls.Add(inv, 1, r++);
 
-        LabelRow("swap_pitch_roll");
+        LabelRow("Swap Pitch / Roll");
         _swap = new CheckBox { AutoSize = true, Checked = _cfg.SwapPitchRoll };
         root.Controls.Add(_swap, 1, r++);
 
-        LabelRow("gain_rot_deg");
+        LabelRow("Gain Rotation (deg)");
         var gr = new FlowLayoutPanel { AutoSize = true };
         _gRoll = TinyGain((decimal)_cfg.GainRotDeg.Roll);
         _gPitch = TinyGain((decimal)_cfg.GainRotDeg.Pitch);
@@ -244,33 +348,57 @@ public sealed class MainForm : Form
         gr.Controls.AddRange(new Control[] { new Label { Text = "R", AutoSize = true }, _gRoll, new Label { Text = "P", AutoSize = true }, _gPitch, new Label { Text = "Y", AutoSize = true }, _gYaw });
         root.Controls.Add(gr, 1, r++);
 
-        LabelRow("gain_trans_m");
+        LabelRow("Gain Translation (m)");
         var gt = new FlowLayoutPanel { AutoSize = true };
         _gSurge = TinyGain((decimal)_cfg.GainTransM.Surge);
         _gSway = TinyGain((decimal)_cfg.GainTransM.Sway);
         _gHeave = TinyGain((decimal)_cfg.GainTransM.Heave);
-        gt.Controls.AddRange(new Control[] { new Label { Text = "sg", AutoSize = true }, _gSurge, new Label { Text = "sw", AutoSize = true }, _gSway, new Label { Text = "hv", AutoSize = true }, _gHeave });
+        gt.Controls.AddRange(new Control[] { new Label { Text = "Surge", AutoSize = true }, _gSurge, new Label { Text = "Sway", AutoSize = true }, _gSway, new Label { Text = "Heave", AutoSize = true }, _gHeave });
         root.Controls.Add(gt, 1, r++);
 
-        LabelRow("steam_vr_seated");
+        LabelRow("SteamVR Seated");
         _seated = new CheckBox { AutoSize = true, Checked = _cfg.SteamVrSeated };
         root.Controls.Add(_seated, 1, r++);
 
-        LabelRow("game_processes");
-        _gamesBox = new TextBox { Text = string.Join(Environment.NewLine, _cfg.GameProcesses), Multiline = true, Height = 80, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9f) };
-        root.Controls.Add(_gamesBox, 1, r++);
+        LabelRow("Game Processes");
+        _gamesBox = new TextBox
+        {
+            Text = string.Join(Environment.NewLine, _cfg.GameProcesses),
+            Multiline = true,
+            Height = 96,
+            Dock = DockStyle.Fill,
+            ScrollBars = ScrollBars.Vertical,
+            Font = new Font("Consolas", 9f)
+        };
+        var addRunning = new Button { Text = "Add Running…", AutoSize = true };
+        addRunning.Click += (_, _) => AddRunningProcess();
+        var gamesCol = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        gamesCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        gamesCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gamesCol.Controls.Add(_gamesBox, 0, 0);
+        gamesCol.Controls.Add(addRunning, 0, 1);
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+        root.Controls.Add(gamesCol, 1, r++);
 
-        LabelRow("eye_forward_m (+front)");
+        LabelRow("Eye Forward m (+front / −aft)");
         _eyeF = new NumericUpDown { DecimalPlaces = 3, Increment = 0.01m, Minimum = -2, Maximum = 2, Value = (decimal)_geom.EyeForwardM, Width = 120 };
         root.Controls.Add(_eyeF, 1, r++);
 
-        LabelRow("eye_right_m (+right)");
+        LabelRow("Eye Right m (+right)");
         _eyeR = new NumericUpDown { DecimalPlaces = 3, Increment = 0.01m, Minimum = -2, Maximum = 2, Value = (decimal)_geom.EyeRightM, Width = 120 };
         root.Controls.Add(_eyeR, 1, r++);
 
-        LabelRow("eye_up_m (+up)");
+        LabelRow("Eye Up m (+up)");
         _eyeU = new NumericUpDown { DecimalPlaces = 3, Increment = 0.01m, Minimum = 0.2m, Maximum = 2.5m, Value = (decimal)(_geom.EyeUpM <= 0 ? 1.10 : _geom.EyeUpM), Width = 120 };
         root.Controls.Add(_eyeU, 1, r++);
+
+        LabelRow("OpenXR imu_to_eye");
+        _openXrEye = new Label { AutoSize = true, Font = new Font("Consolas", 9f) };
+        UpdateOpenXrEyeLabel();
+        _eyeF.ValueChanged += (_, _) => UpdateOpenXrEyeLabel();
+        _eyeR.ValueChanged += (_, _) => UpdateOpenXrEyeLabel();
+        _eyeU.ValueChanged += (_, _) => UpdateOpenXrEyeLabel();
+        root.Controls.Add(_openXrEye, 1, r++);
 
         var savePose = new Button { Text = "Save pose.json", AutoSize = true };
         savePose.Click += (_, _) =>
@@ -279,6 +407,7 @@ public sealed class MainForm : Form
             _cfg.Save(_cfgPath);
             _pose.Gains = _cfg.ToGains();
             _pose.Mode = _cfg.Source;
+            _game.Watch.SetNames(_cfg.GameProcesses);
             _homeNote = $"saved {_cfgPath}";
         };
         var saveGeom = new Button { Text = "Save geometry.json", AutoSize = true };
@@ -305,6 +434,64 @@ public sealed class MainForm : Form
         _swap.CheckedChanged += ApplyLive;
 
         page.Controls.Add(root);
+    }
+
+    void RefreshPorts()
+    {
+        var keep = _portBox.Text;
+        _portBox.Items.Clear();
+        foreach (var p in WitmotionSerialPoseSource.ListPorts())
+            _portBox.Items.Add(p);
+        if (!string.IsNullOrWhiteSpace(keep))
+        {
+            if (!_portBox.Items.Contains(keep))
+                _portBox.Items.Insert(0, keep);
+            _portBox.Text = keep;
+        }
+    }
+
+    void AddRunningProcess()
+    {
+        var names = Process.GetProcesses()
+            .Select(p =>
+            {
+                try { return p.ProcessName; }
+                catch { return ""; }
+            })
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        using var pick = new Form
+        {
+            Text = "Add Running Process",
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(420, 480),
+            MinimizeBox = false,
+            MaximizeBox = false
+        };
+        var list = new ListBox { Dock = DockStyle.Fill, DataSource = names };
+        var ok = new Button { Text = "Add", Dock = DockStyle.Bottom, Height = 32 };
+        ok.Click += (_, _) =>
+        {
+            if (list.SelectedItem is string n && n.Length > 0)
+            {
+                var cur = _gamesBox.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (cur.Add(n))
+                    _gamesBox.Text = string.Join(Environment.NewLine, cur.OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
+            }
+            pick.Close();
+        };
+        pick.Controls.Add(list);
+        pick.Controls.Add(ok);
+        pick.ShowDialog(this);
+    }
+
+    void UpdateOpenXrEyeLabel()
+    {
+        double f = (double)_eyeF.Value, ri = (double)_eyeR.Value, u = (double)_eyeU.Value;
+        _openXrEye.Text = $"X={ri:0.000} (Right)  Y={u:0.000} (Up)  Z={-f:0.000} (−Forward)";
     }
 
     static NumericUpDown TinyGain(decimal v) =>
@@ -355,7 +542,7 @@ public sealed class MainForm : Form
         Multiline = true,
         ReadOnly = true,
         WordWrap = false,
-        ScrollBars = ScrollBars.Vertical,
+        ScrollBars = ScrollBars.Both,
         Font = new Font("Consolas", 9f),
         Dock = DockStyle.Fill,
         BorderStyle = BorderStyle.FixedSingle,
@@ -364,7 +551,7 @@ public sealed class MainForm : Form
 
     static NumericUpDown AddNud(TableLayoutPanel grid, int col, int row, string label, decimal min, decimal max, decimal inc, int places)
     {
-        grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, col, row);
+        grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top, Margin = new Padding(0, 8, 6, 0) }, col, row);
         var n = new NumericUpDown
         {
             Minimum = min,
@@ -372,7 +559,8 @@ public sealed class MainForm : Form
             Increment = inc,
             DecimalPlaces = places,
             Dock = DockStyle.Fill,
-            ThousandsSeparator = false
+            ThousandsSeparator = false,
+            Margin = new Padding(0, 4, 8, 4)
         };
         grid.Controls.Add(n, col + 1, row);
         return n;
@@ -397,7 +585,7 @@ public sealed class MainForm : Form
     {
         if (_previewArmed)
         {
-            _homeNote = "Home refused - disarm preview first (platform at SimTools neutral)";
+            _homeNote = "Home refused — disarm Arm first (platform at SimTools neutral)";
             return;
         }
         _pose.CaptureHome();
@@ -434,22 +622,42 @@ public sealed class MainForm : Form
         _deltaBox.Text = FormatDelta(delta, steam, adj);
         _rigBox.Text = FormatRig(raw, home, rig);
 
-        string engine = _game.Watch.Detected ? $"game engine up ({_game.Watch.Status})" : "game no engine";
-        string layer = _game.LayerLive ? "layer live" : "waiting for layer";
+        bool imu = _serial.IsLive;
+        bool svr = _steam.IsLive;
+        bool layer = _game.LayerLive;
+        bool eng = _game.Watch.Detected;
+        SetLamp(_lampImu, imu, imu ? $"IMU {_cfg.Witmotion.Port}" : "IMU");
+        SetLamp(_lampSteam, svr, svr ? "SteamVR" : "SteamVR");
+        SetLamp(_lampLayer, layer, layer ? "Layer" : "Layer");
+        SetLamp(_lampEngine, eng, eng ? $"Engine {_game.Watch.Status}" : "Engine");
+
+        string engine = eng ? $"Engine {_game.Watch.Status}" : "Engine none";
+        string layerTxt = layer ? "Layer LIVE" : "Layer waiting";
+        string srcMode = SourceModeLabel(_pose.Mode, _cfg.Witmotion.Port);
         _status.Text =
-            $"rig {(_serial.IsLive ? "live " + _cfg.Witmotion.Port : _serial.Status)}   " +
-            $"steam {(_steam.IsLive ? "seated" : _steam.Status)}   " +
-            $"{engine}, {layer}   " +
-            $"IMU {_serial.AngleHz:0} Hz  dropped {_serial.DroppedChecksum}" +
+            $"{srcMode}   " +
+            $"IMU {(_serial.IsLive ? "LIVE" : _serial.Status)}   " +
+            $"SteamVR {(_steam.IsLive ? "LIVE seated" : _steam.Status)}   " +
+            $"{engine}   {layerTxt}   " +
+            $"{_serial.AngleHz:0} Hz  dropped {_serial.DroppedChecksum}" +
             (string.IsNullOrEmpty(_homeNote) ? "" : "   " + _homeNote);
+    }
+
+    static string SourceModeLabel(string mode, string port)
+    {
+        if (string.Equals(mode, "virtual", StringComparison.OrdinalIgnoreCase))
+            return "Source Mode: Virtual Numeric";
+        return string.IsNullOrWhiteSpace(port)
+            ? "Source Mode: WitMotion"
+            : $"Source Mode: WitMotion {port}";
     }
 
     string FormatSteam(in RigidPose p)
     {
         var e = p.ToEulerSample();
         return
-            "SteamVR (anytime SteamVR is on)\r\n" +
-            $"SteamVR  {LiveHold(p.Live)}  {(_steam.IsLive ? _steam.Status : "off")}  space={p.Space}\r\n" +
+            "SteamVR\r\n" +
+            $"SteamVR  {LiveHold(p.Live)}  {(_steam.IsLive ? _steam.Status : "Off")}  Space={p.Space}\r\n" +
             FormatRigid(p, e);
     }
 
@@ -458,12 +666,12 @@ public sealed class MainForm : Form
         var el = l.ToEulerSample();
         var er = r.ToEulerSample();
         return
-            "Game OpenXR (ACE / AMS2 / any title + layer)\r\n" +
+            "Game OpenXR\r\n" +
             $"Game L  {LiveHold(l.Live)}  {_game.Status}\r\n" +
-            $"space={l.Space}\r\n" +
+            $"Space={l.Space}\r\n" +
             FormatRigid(l, el) +
             "\r\n" +
-            $"Game R  {LiveHold(r.Live)}  space={r.Space}\r\n" +
+            $"Game R  {LiveHold(r.Live)}  Space={r.Space}\r\n" +
             FormatRigid(r, er);
     }
 
@@ -471,11 +679,11 @@ public sealed class MainForm : Form
     {
         var e = p.ToEulerSample();
         string mode = _previewArmed
-            ? "LIVE  T_cor*inv(T_rig)*inv(T_cor)*T_hmd"
-            : "LIVE  passthrough (preview OFF = headset)";
+            ? "LIVE  T_cor × inv(T_rig) × inv(T_cor) × T_hmd"
+            : "LIVE  passthrough (Arm Off = headset)";
         return
-            "Adjusted T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd\r\n" +
-            $"Adjusted ({mode})  space={p.Space}\r\n" +
+            "Adjusted T_view\r\n" +
+            $"Adjusted ({mode})  Space={p.Space}\r\n" +
             FormatRigid(p, e);
     }
 
@@ -483,14 +691,14 @@ public sealed class MainForm : Form
     {
         var e = p.ToEulerSample();
         string hint = _previewArmed
-            ? "armed: headset minus adjusted (what inv(T_rig) about CoR removed)"
-            : "disarmed: identity, should stay ~0";
+            ? "Armed: headset minus adjusted (what inv(T_rig) about CoR removed)"
+            : "Disarmed: identity, should stay ~0";
         return
-            "Delta  headset vs adjusted\r\n" +
+            "Delta  Headset vs Adjusted\r\n" +
             $"Delta  {LiveHold(p.Live)}  {hint}\r\n" +
             FormatRigid(p, e) +
             "\r\n" +
-            $"drag m  dx={adj.Px - steam.Px,8:0.0000}  dy={adj.Py - steam.Py,8:0.0000}  dz={adj.Pz - steam.Pz,8:0.0000}";
+            $"Drag m  dX={adj.Px - steam.Px,8:0.0000}  dY={adj.Py - steam.Py,8:0.0000}  dZ={adj.Pz - steam.Pz,8:0.0000}";
     }
 
     string FormatRig(in PoseSample raw, in PoseSample home, in PoseSample rig)
@@ -501,27 +709,28 @@ public sealed class MainForm : Form
         PoseMath.Rotate(iqx, iqy, iqz, iqw, ox, oy, oz, out var rx, out var ry, out var rz);
         double dx = rx - ox, dy = ry - oy, dz = rz - oz;
         return
-            "T_rig (Witmotion and/or virtual numeric)\r\n" +
-            $"source  {_serial.Name}  mode={_pose.Mode}\r\n" +
-            $"raw   R={raw.RollDeg,7:0.00} P={raw.PitchDeg,7:0.00} Y={raw.YawDeg,7:0.00}  " +
-            $"sg={raw.SurgeM:0.000} sw={raw.SwayM:0.000} hv={raw.HeaveM:0.000}\r\n" +
-            $"valid={raw.Valid}  home R={home.RollDeg,7:0.00} P={home.PitchDeg,7:0.00} Y={home.YawDeg,7:0.00}\r\n" +
-            $"T_rig R={rig.RollDeg,7:0.00} P={rig.PitchDeg,7:0.00} Y={rig.YawDeg,7:0.00}  " +
-            $"sg={rig.SurgeM:0.000} sw={rig.SwayM:0.000} hv={rig.HeaveM:0.000}\r\n" +
-            $"T_rig quat      x={qx,8:0.0000}  y={qy,8:0.0000}  z={qz,8:0.0000}  w={qw,8:0.0000}\r\n" +
-            $"inv(T_rig) quat x={iqx,8:0.0000}  y={iqy,8:0.0000}  z={iqz,8:0.0000}  w={iqw,8:0.0000}\r\n" +
-            $"eye offset m    x={ox,7:0.000}  y={oy,7:0.000}  z={oz,7:0.000}  (right, up, -forward)\r\n" +
-            $"drag at eye m   dx={dx,8:0.0000}  dy={dy,8:0.0000}  dz={dz,8:0.0000}  (leverage about CoR)\r\n" +
-            $"valid={rig.Valid}  wit {_serial.Status}  live={_serial.IsLive}";
+            "T_rig\r\n" +
+            $"{SourceModeLabel(_pose.Mode, _cfg.Witmotion.Port)}\r\n" +
+            $"Raw    Roll={raw.RollDeg,7:0.00}  Pitch={raw.PitchDeg,7:0.00}  Yaw={raw.YawDeg,7:0.00}  " +
+            $"Surge={raw.SurgeM:0.000}  Sway={raw.SwayM:0.000}  Heave={raw.HeaveM:0.000}\r\n" +
+            $"Valid={Flag(raw.Valid)}  Home Roll={home.RollDeg,7:0.00}  Pitch={home.PitchDeg,7:0.00}  Yaw={home.YawDeg,7:0.00}\r\n" +
+            $"T_rig  Roll={rig.RollDeg,7:0.00}  Pitch={rig.PitchDeg,7:0.00}  Yaw={rig.YawDeg,7:0.00}  " +
+            $"Surge={rig.SurgeM:0.000}  Sway={rig.SwayM:0.000}  Heave={rig.HeaveM:0.000}\r\n" +
+            $"T_rig Quat       X={qx,8:0.0000}  Y={qy,8:0.0000}  Z={qz,8:0.0000}  W={qw,8:0.0000}\r\n" +
+            $"inv(T_rig) Quat  X={iqx,8:0.0000}  Y={iqy,8:0.0000}  Z={iqz,8:0.0000}  W={iqw,8:0.0000}\r\n" +
+            $"Eye Offset m (OpenXR)  X={ox,7:0.000} Right  Y={oy,7:0.000} Up  Z={oz,7:0.000} −Forward\r\n" +
+            $"Drag at Eye m          dX={dx,8:0.0000}  dY={dy,8:0.0000}  dZ={dz,8:0.0000}\r\n" +
+            $"Valid={Flag(rig.Valid)}  WitMotion {_serial.Status}  Live={Flag(_serial.IsLive)}";
     }
 
     static string FormatRigid(in RigidPose p, in PoseSample e) =>
-        $"pos m    x={p.Px,8:0.0000}  y={p.Py,8:0.0000}  z={p.Pz,8:0.0000}\r\n" +
-        $"quat     x={p.Qx,8:0.0000}  y={p.Qy,8:0.0000}  z={p.Qz,8:0.0000}  w={p.Qw,8:0.0000}\r\n" +
-        $"euler deg roll={e.RollDeg,7:0.00}  pitch={e.PitchDeg,7:0.00}  yaw={e.YawDeg,7:0.00}\r\n" +
-        $"valid={p.Valid}";
+        $"Position m   X={p.Px,8:0.0000}  Y={p.Py,8:0.0000}  Z={p.Pz,8:0.0000}\r\n" +
+        $"Quaternion   X={p.Qx,8:0.0000}  Y={p.Qy,8:0.0000}  Z={p.Qz,8:0.0000}  W={p.Qw,8:0.0000}\r\n" +
+        $"Euler deg    Roll={e.RollDeg,7:0.00}  Pitch={e.PitchDeg,7:0.00}  Yaw={e.YawDeg,7:0.00}\r\n" +
+        $"Valid={Flag(p.Valid)}";
 
     static string LiveHold(bool live) => live ? "LIVE" : "HOLD";
+    static string Flag(bool v) => v ? "True" : "False";
 
     void PublishLoop()
     {
