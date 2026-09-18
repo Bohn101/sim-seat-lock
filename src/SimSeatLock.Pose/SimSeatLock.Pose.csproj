@@ -8,8 +8,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>SimSeatLock.Pose</AssemblyName>
     <RootNamespace>SimSeatLock.Pose</RootNamespace>
-    <Version>0.2.0</Version>
-    <InformationalVersion>0.2.0</InformationalVersion>
+    <Version>0.2.1</Version>
+    <InformationalVersion>0.2.1</InformationalVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>embedded</DebugType>
     <ApplicationManifest>app.manifest</ApplicationManifest>

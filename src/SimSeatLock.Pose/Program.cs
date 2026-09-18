@@ -8,7 +8,7 @@ namespace SimSeatLock.Pose;
 
 public static class Program
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
 
     const int AttachParentProcess = -1;
 
