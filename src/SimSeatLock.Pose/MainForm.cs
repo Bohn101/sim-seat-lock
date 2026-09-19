@@ -26,7 +26,8 @@ public sealed class MainForm : Form
     readonly TextBox _adjBox;
     readonly TextBox _deltaBox;
     readonly TextBox _rigBox;
-    readonly Label _status;
+    readonly StatusStrip _strip;
+    readonly ToolStripStatusLabel _status;
     readonly Label _lampImu, _lampSteam, _lampLayer, _lampEngine;
     readonly NumericUpDown _roll, _pitch, _yaw, _surge, _sway, _heave;
     readonly System.Windows.Forms.Timer _ui;
@@ -44,6 +45,7 @@ public sealed class MainForm : Form
     NumericUpDown _eyeF = null!, _eyeR = null!, _eyeU = null!;
     TextBox _gamesBox = null!;
     Label _openXrEye = null!;
+    GroupBox _serialGroup = null!;
 
     public MainForm(
         PoseConfig cfg,
@@ -70,10 +72,11 @@ public sealed class MainForm : Form
         Text = $"SimSeatLock.Pose v{Program.Version}";
         StartPosition = FormStartPosition.Manual;
         Location = new Point(20, 20);
-        ClientSize = new Size(1180, 820);
-        MinimumSize = new Size(1040, 720);
+        ClientSize = new Size(1180, 840);
+        MinimumSize = new Size(1040, 740);
         KeyPreview = true;
         Font = new Font("Segoe UI", 9f);
+        Padding = new Padding(0, 0, 0, 2);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         var live = new TabPage("Live");
@@ -83,17 +86,24 @@ public sealed class MainForm : Form
         tabs.TabPages.Add(config);
         tabs.TabPages.Add(help);
 
-        _status = new Label
+        _strip = new StatusStrip
         {
             Dock = DockStyle.Bottom,
-            Height = 36,
-            AutoEllipsis = true,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(8, 6, 8, 8)
+            SizingGrip = false,
+            AutoSize = false,
+            Height = 44,
+            Padding = new Padding(8, 6, 20, 12)
         };
+        _status = new ToolStripStatusLabel
+        {
+            Spring = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoToolTip = true
+        };
+        _strip.Items.Add(_status);
 
         Controls.Add(tabs);
-        Controls.Add(_status);
+        Controls.Add(_strip);
 
         var top = new FlowLayoutPanel
         {
@@ -142,30 +152,15 @@ public sealed class MainForm : Form
         _deltaBox = MakeBox();
         _rigBox = MakeBox();
 
-        var splitLeft = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-            SplitterWidth = 8
-        };
+        var splitLeft = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 8 };
         splitLeft.Panel1.Controls.Add(_steamBox);
         splitLeft.Panel2.Controls.Add(_adjBox);
 
-        var splitRight = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-            SplitterWidth = 8
-        };
+        var splitRight = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 8 };
         splitRight.Panel1.Controls.Add(_gameBox);
         splitRight.Panel2.Controls.Add(_deltaBox);
 
-        var splitMid = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterWidth = 8
-        };
+        var splitMid = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8 };
         splitMid.Panel1.Controls.Add(splitLeft);
         splitMid.Panel2.Controls.Add(splitRight);
 
@@ -175,7 +170,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 4,
-            Padding = new Padding(8, 8, 8, 8)
+            Padding = new Padding(8)
         };
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         virtGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -195,21 +190,11 @@ public sealed class MainForm : Form
             n.ValueChanged += (_, _) => PushVirtual();
         virt.Controls.Add(virtGrid);
 
-        var splitBot = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-            SplitterWidth = 8
-        };
+        var splitBot = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8 };
         splitBot.Panel1.Controls.Add(_rigBox);
         splitBot.Panel2.Controls.Add(virt);
 
-        var splitOuter = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-            SplitterWidth = 8
-        };
+        var splitOuter = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 8 };
         splitOuter.Panel1.Controls.Add(splitMid);
         splitOuter.Panel2.Controls.Add(splitBot);
 
@@ -226,7 +211,7 @@ public sealed class MainForm : Form
                 splitRight.SplitterDistance = Math.Max(120, splitRight.Height / 2);
                 splitBot.SplitterDistance = Math.Max(200, (int)(splitBot.Width * 0.62));
             }
-            catch { /* first-layout race */ }
+            catch { }
         };
 
         BuildConfigTab(config);
@@ -248,7 +233,7 @@ public sealed class MainForm : Form
     static Label MakeLamp(string name) => new()
     {
         AutoSize = true,
-        Text = "● " + name,
+        Text = "\u25cf " + name,
         Padding = new Padding(10, 6, 4, 0),
         ForeColor = Color.Gray
     };
@@ -256,7 +241,7 @@ public sealed class MainForm : Form
     static void SetLamp(Label lamp, bool on, string extra)
     {
         lamp.ForeColor = on ? Color.ForestGreen : Color.Firebrick;
-        lamp.Text = (on ? "● " : "● ") + extra;
+        lamp.Text = "\u25cf " + extra;
     }
 
     void BuildHelpTab(TabPage page)
@@ -283,33 +268,42 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 18,
+            RowCount = 16,
             Padding = new Padding(10),
-            AutoScroll = true
+            AutoScroll = true,
+            AutoSize = true
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (int i = 0; i < 16; i++)
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         int r = 0;
         void LabelRow(string text)
         {
-            root.Controls.Add(new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left }, 0, r);
+            root.Controls.Add(new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 8, 8, 4) }, 0, r);
         }
 
         LabelRow("Source Mode");
         _srcBox = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Dock = DockStyle.Left,
-            Width = 220
+            Width = 200,
+            Anchor = AnchorStyles.Left
         };
-        _srcBox.Items.AddRange(["witmotion", "virtual"]);
+        _srcBox.Items.AddRange(["WitMotion", "Virtual Numeric"]);
         var src = (_cfg.Source ?? "witmotion").Trim().ToLowerInvariant();
-        _srcBox.SelectedItem = src is "virtual" or "witmotion" ? src : "witmotion";
+        _srcBox.SelectedItem = src == "virtual" ? "Virtual Numeric" : "WitMotion";
+        _srcBox.SelectedIndexChanged += (_, _) => ApplySourceMode(restartSerial: true);
         root.Controls.Add(_srcBox, 1, r++);
 
-        LabelRow("WitMotion Port");
-        _portBox = new ComboBox { Dock = DockStyle.Left, Width = 220 };
+        LabelRow("Serial");
+        _serialGroup = new GroupBox { Text = "Used when Source Mode is WitMotion", AutoSize = true, Dock = DockStyle.Top };
+        var serialGrid = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 2, Padding = new Padding(8), Dock = DockStyle.Fill };
+        serialGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        serialGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        serialGrid.Controls.Add(new Label { Text = "Port", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+        _portBox = new ComboBox { Width = 160 };
         RefreshPorts();
         if (!string.IsNullOrWhiteSpace(_cfg.Witmotion.Port))
         {
@@ -317,16 +311,21 @@ public sealed class MainForm : Form
                 _portBox.Items.Insert(0, _cfg.Witmotion.Port);
             _portBox.Text = _cfg.Witmotion.Port;
         }
-        var refreshPorts = new Button { Text = "Refresh Ports", AutoSize = true };
+        var refreshPorts = new Button { Text = "Refresh", AutoSize = true };
         refreshPorts.Click += (_, _) => RefreshPorts();
+        var applyPort = new Button { Text = "Reconnect", AutoSize = true };
+        applyPort.Click += (_, _) => ApplySourceMode(restartSerial: true);
         var portRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         portRow.Controls.Add(_portBox);
         portRow.Controls.Add(refreshPorts);
-        root.Controls.Add(portRow, 1, r++);
-
-        LabelRow("WitMotion Baud");
-        _baudBox = new NumericUpDown { Minimum = 9600, Maximum = 921600, Value = Math.Clamp(_cfg.Witmotion.Baud, 9600, 921600), Dock = DockStyle.Left, Width = 120 };
-        root.Controls.Add(_baudBox, 1, r++);
+        portRow.Controls.Add(applyPort);
+        serialGrid.Controls.Add(portRow, 1, 0);
+        serialGrid.Controls.Add(new Label { Text = "Baud", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
+        _baudBox = new NumericUpDown { Minimum = 9600, Maximum = 921600, Value = Math.Clamp(_cfg.Witmotion.Baud, 9600, 921600), Width = 120 };
+        serialGrid.Controls.Add(_baudBox, 1, 1);
+        _serialGroup.Controls.Add(serialGrid);
+        root.Controls.Add(_serialGroup, 1, r++);
+        UpdateSerialGroupEnabled();
 
         LabelRow("Invert");
         var inv = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
@@ -366,18 +365,15 @@ public sealed class MainForm : Form
             Text = string.Join(Environment.NewLine, _cfg.GameProcesses),
             Multiline = true,
             Height = 96,
-            Dock = DockStyle.Fill,
+            Width = 360,
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Consolas", 9f)
         };
         var addRunning = new Button { Text = "Add Running…", AutoSize = true };
         addRunning.Click += (_, _) => AddRunningProcess();
-        var gamesCol = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-        gamesCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        gamesCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        gamesCol.Controls.Add(_gamesBox, 0, 0);
-        gamesCol.Controls.Add(addRunning, 0, 1);
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+        var gamesCol = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        gamesCol.Controls.Add(_gamesBox);
+        gamesCol.Controls.Add(addRunning);
         root.Controls.Add(gamesCol, 1, r++);
 
         LabelRow("Eye Forward m (+front / −aft)");
@@ -403,10 +399,8 @@ public sealed class MainForm : Form
         var savePose = new Button { Text = "Save pose.json", AutoSize = true };
         savePose.Click += (_, _) =>
         {
-            PullPoseFromUi();
+            ApplySourceMode(restartSerial: true);
             _cfg.Save(_cfgPath);
-            _pose.Gains = _cfg.ToGains();
-            _pose.Mode = _cfg.Source;
             _game.Watch.SetNames(_cfg.GameProcesses);
             _homeNote = $"saved {_cfgPath}";
         };
@@ -434,6 +428,28 @@ public sealed class MainForm : Form
         _swap.CheckedChanged += ApplyLive;
 
         page.Controls.Add(root);
+    }
+
+    void UpdateSerialGroupEnabled()
+    {
+        if (_serialGroup != null)
+            _serialGroup.Enabled = !string.Equals(SelectedSource(), "virtual", StringComparison.OrdinalIgnoreCase);
+    }
+
+    string SelectedSource() =>
+        string.Equals(_srcBox.Text, "Virtual Numeric", StringComparison.OrdinalIgnoreCase) ? "virtual" : "witmotion";
+
+    void ApplySourceMode(bool restartSerial)
+    {
+        PullPoseFromUi();
+        _pose.Gains = _cfg.ToGains();
+        _pose.Mode = _cfg.Source;
+        UpdateSerialGroupEnabled();
+        if (restartSerial && !string.Equals(_cfg.Source, "virtual", StringComparison.OrdinalIgnoreCase))
+        {
+            _serial.Start();
+            _homeNote = $"WitMotion reconnect {_cfg.Witmotion.Port}";
+        }
     }
 
     void RefreshPorts()
@@ -507,7 +523,7 @@ public sealed class MainForm : Form
 
     void PullPoseFromUi()
     {
-        _cfg.Source = string.IsNullOrWhiteSpace(_srcBox.Text) ? "witmotion" : _srcBox.Text.Trim();
+        _cfg.Source = SelectedSource();
         _cfg.Witmotion.Port = _portBox.Text.Trim();
         _cfg.Witmotion.Baud = (int)_baudBox.Value;
         _cfg.Invert.Roll = _invR.Checked;
@@ -627,15 +643,14 @@ public sealed class MainForm : Form
         bool layer = _game.LayerLive;
         bool eng = _game.Watch.Detected;
         SetLamp(_lampImu, imu, imu ? $"IMU {_cfg.Witmotion.Port}" : "IMU");
-        SetLamp(_lampSteam, svr, svr ? "SteamVR" : "SteamVR");
-        SetLamp(_lampLayer, layer, layer ? "Layer" : "Layer");
+        SetLamp(_lampSteam, svr, "SteamVR");
+        SetLamp(_lampLayer, layer, "Layer");
         SetLamp(_lampEngine, eng, eng ? $"Engine {_game.Watch.Status}" : "Engine");
 
         string engine = eng ? $"Engine {_game.Watch.Status}" : "Engine none";
         string layerTxt = layer ? "Layer LIVE" : "Layer waiting";
-        string srcMode = SourceModeLabel(_pose.Mode, _cfg.Witmotion.Port);
         _status.Text =
-            $"{srcMode}   " +
+            $"{SourceModeLabel(_pose.Mode, _cfg.Witmotion.Port)}   " +
             $"IMU {(_serial.IsLive ? "LIVE" : _serial.Status)}   " +
             $"SteamVR {(_steam.IsLive ? "LIVE seated" : _steam.Status)}   " +
             $"{engine}   {layerTxt}   " +
@@ -649,7 +664,7 @@ public sealed class MainForm : Form
             return "Source Mode: Virtual Numeric";
         return string.IsNullOrWhiteSpace(port)
             ? "Source Mode: WitMotion"
-            : $"Source Mode: WitMotion {port}";
+            : $"Source Mode: WitMotion " + port;
     }
 
     string FormatSteam(in RigidPose p)
@@ -767,9 +782,7 @@ public sealed class MainForm : Form
                 };
                 _shm.Write(block);
             }
-            catch
-            {
-            }
+            catch { }
 
             next += 4;
             var sleep = next - Environment.TickCount64;
