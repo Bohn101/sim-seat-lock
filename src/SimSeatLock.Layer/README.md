@@ -24,7 +24,8 @@ Do not also register HKCU — SteamVR then shows two identical rows.
 Do **not** set `XR_API_LAYER_PATH` or `XR_ENABLE_API_LAYERS`.
 
 Titles: ACE (proven), LMU (same DLL; EAC blocks it on the protected launcher).
-See [`docs/LMU.md`](../../docs/LMU.md).
+AMS2 EngineWatch name is `AMS2AVX`; stock SteamVR AMS2 does not load this DLL.
+See [`docs/LMU.md`](../../docs/LMU.md) and [`docs/AMS2.md`](../../docs/AMS2.md).
 
 ## Build / register (Git Bash)
 
@@ -53,3 +54,4 @@ Disable for LMU online: `cmd.exe //c src/SimSeatLock.Layer/disable-layer.cmd`
 4. SteamVR (one SimSeatLock row, On) then ACE **Play Assetto Corsa EVO**, or LMU offline `Le Mans Ultimate.exe` +VR.
 5. Success: `publish/layer/layer.log` has `DllMain PROCESS_ATTACH` + `negotiate OK` for that exe, Pose Game LIVE (`valid=True`).
 6. Arm layer only after Home. Disarm before Reset View / Home.
+7. AMS2 four-green is not expected on the stock SteamVR launch. Read `docs/AMS2.md` before swapping `openvr_api.dll`.

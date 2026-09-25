@@ -52,3 +52,5 @@ Home / title Reset View only with platform at SimTools neutral and layer disarme
 If the log is missing, the title never `LoadLibrary`'d the DLL. SteamVR listing the layer is not the same as the title calling `xrNegotiateLoaderApiLayerInterface`.
 
 LMU: see [`docs/LMU.md`](LMU.md). EAC blocks this DLL on `start_protected_game`. Offline proof is `Le Mans Ultimate.exe` +VR.
+
+AMS2: see [`docs/AMS2.md`](AMS2.md). Stock SteamVR launch is OpenVR. Engine lamp green + Layer red is expected until `layer.log` names `AMS2AVX.exe`.

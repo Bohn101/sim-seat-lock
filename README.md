@@ -22,11 +22,16 @@ OpenXR (EAC blocks the protected launcher; offline `Le Mans Ultimate.exe
 +VR` loads the layer). Any native-OpenXR title can use it once the
 loader chains implicit layers.
 
-| Now (v0.2) | Next |
+Automobilista 2 is on the EngineWatch list (`AMS2AVX`) so the Engine lamp
+goes green. Stock SteamVR AMS2 is OpenVR. The Layer lamp stays red until
+the title creates an OpenXR instance. Restarting Pose does not attach it.
+See [`docs/AMS2.md`](docs/AMS2.md).
+
+| Now (v0.2.2) | Next |
 |---|---|
 | Witmotion serial IMU (COM8 / 115200), Home, ≥250 Hz shared memory | Predictive `T_rig` from the motion-command stream, IMU residual |
 | Thin `xrLocateViews` layer, arm/disarm, CoR from geometry.json | Same layer, second `IPoseSource` |
-| ACE, LMU, AMS2, iRacing names in `game_processes` | More OpenXR titles, no second injector |
+| ACE + LMU native OpenXR; AMS2 / iRacing names in `game_processes` | AMS2 only if it negotiates OpenXR (measure `layer.log`) |
 
 **Not** SimHub Motion, SRS IntelliComp, FlyPT Mover, or SimTools as a
 pose source. **Not** BuzzteeBear OXRMC. Those stacks feed washout or a
@@ -37,6 +42,7 @@ https://github.com/Bohn101/psvr2-visual-motion-compensation
 
 Studio 397 / Epic allow-list draft: [`docs/S397-allowlist.txt`](docs/S397-allowlist.txt).
 LMU notes: [`docs/LMU.md`](docs/LMU.md).
+AMS2 notes: [`docs/AMS2.md`](docs/AMS2.md).
 
 ## If you are Grok
 

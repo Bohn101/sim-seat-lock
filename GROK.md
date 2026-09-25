@@ -42,6 +42,8 @@ Never treat washout / specific-force telemetry as `T_rig`. Seat-lock is geometry
 ACE and LMU OpenXR Mode = native OpenXR. PSVR2 PC = SteamVR OpenXR runtime.
 LMU official Steam option is **Launch Le Mans Ultimate in Steam VR Mode**. If that path is OpenVR, the implicit layer will not attach — measure `layer.log` before changing discovery. See `docs/LMU.md`.
 
+AMS2 stock SteamVR / Oculus launch = OpenVR (`openvr_api.dll`). EngineWatch going green on `AMS2AVX` is not a layer attach. Layer red + Game HOLD after sitting in the car is expected until `publish/layer/layer.log` shows `DllMain PROCESS_ATTACH` + `negotiate OK` for that exe. Restarting Pose cannot attach it. See `docs/AMS2.md`. Do not add an OpenVR injector to paper over this.
+
 Build **our** thin OpenXR API layer (`SimSeatLock.Layer`) from the mbucchia OpenXR layer template.
 
 - Intercept `xrLocateViews` and the poses submitted with projection layers.
@@ -73,6 +75,7 @@ docs/                     architecture notes
 8. Terminal commands for the user: Git Bash only (not Git CMD / cmd.exe).
 9. Do not use OpenXR-MotionCompensation, SimHub Motion, SRS, FlyPT Mover, or SimTools mmap/UDP/serial as a pose source.
 10. Do not set `XR_API_LAYER_PATH` / `XR_ENABLE_API_LAYERS` unless a measured test shows LMU needs them **and** ACE still loads.
+11. Do not replace `openvr_api.dll` in ACE or LMU. An AMS2-folder-only OpenComposite drop is an experiment measured by `layer.log`, not a new product path.
 
 ## v0 build order
 
