@@ -30,6 +30,17 @@ public sealed class EngineWatch
             .Select(n => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n[..^4] : n)
             .ToArray();
 
+    /// <summary>
+    /// Titles that ship OpenVR / LibOVR first. EngineWatch can see them while
+    /// the implicit OpenXR layer never LoadLibrarys. ACE / LMU are native OpenXR.
+    /// </summary>
+    public static bool LooksOpenVrNative(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+        return processName.Contains("AMS2", StringComparison.OrdinalIgnoreCase)
+            || processName.Contains("iRacing", StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Poll()
     {
         string[] want;

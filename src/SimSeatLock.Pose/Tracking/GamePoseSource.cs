@@ -34,9 +34,13 @@ public sealed class GamePoseSource : IDisposable
         {
             _watch.Poll();
             if (_watch.Detected)
-                return LayerLive
-                    ? $"engine up ({_watch.Status}), layer live"
-                    : $"engine up ({_watch.Status}), waiting for layer";
+            {
+                if (LayerLive)
+                    return $"engine up ({_watch.Status}), layer live";
+                if (EngineWatch.LooksOpenVrNative(_watch.Status))
+                    return $"engine up ({_watch.Status}), OpenVR title — waiting for OpenXR";
+                return $"engine up ({_watch.Status}), waiting for layer";
+            }
             return LayerLive ? "layer live, no engine" : "waiting for layer";
         }
     }
@@ -104,12 +108,15 @@ public sealed class GamePoseSource : IDisposable
             }
             else
             {
+                string wait = "waiting for layer";
+                if (_watch.Detected && EngineWatch.LooksOpenVrNative(_watch.Status))
+                    wait = "OpenVR title — layer attaches only after OpenXR negotiate";
                 lock (_gate)
                 {
                     _layerLive = false;
                     _left = _left with { Live = false, Valid = false };
                     _right = _right with { Live = false, Valid = false };
-                    _detail = "waiting for layer";
+                    _detail = wait;
                 }
             }
 

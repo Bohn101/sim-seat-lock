@@ -4,7 +4,7 @@ static class HelpText
 {
     public const string Body =
 """
-SimSeatLock.Pose v0.2.1
+SimSeatLock.Pose v0.2.2
 
 Seat-lock keeps the VR eyepoint in the bucket while the platform moves.
 
@@ -74,6 +74,9 @@ Lamps
     Green = live. Red = down. IMU = COM port open and angle packets.
     SteamVR = runtime connected. Layer = Game.v1 heartbeat. Engine =
     a Game Processes name is running.
+    Three-green on AMS2AVX (IMU + SteamVR + Engine, Layer red) is the
+    native SteamVR / OpenVR launch. Restarting Pose will not attach the
+    layer. See AMS2 below.
 
 
 CONFIG
@@ -134,5 +137,14 @@ EAC / LMU
 Steam Play uses Easy Anti-Cheat and will refuse this DLL until S397/Epic
 allow-list XR_APILAYER_NOVENDOR_sim_seat_lock. Offline test:
 Le Mans Ultimate.exe +VR. Draft: docs/S397-allowlist.txt.
+
+
+AMS2
+
+AMS2AVX is OpenVR-first (stock SteamVR / Oculus launch). Engine green +
+Layer red is expected. The title must create an OpenXR instance before
+Layer turns green. Proof: publish\\layer\\layer.log shows
+DllMain PROCESS_ATTACH and negotiate OK for AMS2AVX.exe. Restarting Pose
+does not LoadLibrary the DLL into AMS2. Details: docs/AMS2.md.
 """;
 }
