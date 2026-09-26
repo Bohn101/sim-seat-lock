@@ -4,7 +4,7 @@ Lightweight seat-lock motion compensation for VR sim racing and flight.
 One pose process. One measured chassis sensor today; commanded platform
 pose later, same interface. Injection path is chosen from the running
 exe: implicit OpenXR layer for ACE / LMU, OpenVR `openvr_api.dll` proxy
-for AMS2.
+for AMS2 and ACC.
 
 The headset stays in the bucket while a 6DOF platform (ProSimu P5 /
 SimTools) moves.
@@ -18,17 +18,18 @@ to the seat is kept. Platform rotation and translation are subtracted
 about the center of rotation. Preview off = identity. The injector is
 what changes the headset.
 
-Ships against SteamVR on PSVR2. Proven on Assetto Corsa Evo (OpenXR).
-Same OpenXR DLL on Le Mans Ultimate when the title loads OpenXR (EAC
-blocks the protected launcher; offline `Le Mans Ultimate.exe +VR`).
-AMS2 is OpenVR — install `src/SimSeatLock.OpenVR` into
-`Automobilista 2\x64`. See [`docs/AMS2.md`](docs/AMS2.md).
+Ships against SteamVR on PSVR2. Proven on Assetto Corsa Evo and Le Mans
+Ultimate (OpenXR), Automobilista 2 (`IVRCompositor_029`), and Assetto
+Corsa Competizione (`IVRCompositor_022`, UE4 OpenVR 1.5.17).
 
-| Now (v0.2.3) | Next |
+How each title was reverse-engineered, including the failed turns:
+[`docs/RESEARCH.md`](docs/RESEARCH.md).
+
+| Now (v0.2.4) | Next |
 |---|---|
 | Witmotion serial IMU (COM8 / 115200), Home, ≥250 Hz shared memory | Predictive `T_rig` from the motion-command stream, IMU residual |
-| OpenXR layer (ACE / LMU) + OpenVR proxy (AMS2), same T_view | Same injectors, second `IPoseSource` |
-| Exe-based path: ACE/LMU = openxr, AMS2/iRacing = openvr | More titles after we measure how they talk VR |
+| OpenXR layer (ACE / LMU) + OpenVR proxy (AMS2 `_029`, ACC `_022`) | Same injectors, second `IPoseSource` |
+| Exe-based path: ACE/LMU = openxr, AMS2/iRacing = openvr | Classify AC2 as openvr; iRacing still unproven |
 
 **Not** SimHub Motion, SRS IntelliComp, FlyPT Mover, or SimTools as a
 pose source. **Not** BuzzteeBear OXRMC. Those stacks feed washout or a
@@ -40,10 +41,11 @@ https://github.com/Bohn101/psvr2-visual-motion-compensation
 Studio 397 / Epic allow-list draft: [`docs/S397-allowlist.txt`](docs/S397-allowlist.txt).
 LMU notes: [`docs/LMU.md`](docs/LMU.md).
 AMS2 notes: [`docs/AMS2.md`](docs/AMS2.md).
+Research diary: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ## If you are Grok
 
-Read [`GROK.md`](GROK.md) first.
+Read [`GROK.md`](GROK.md) first, then [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ## Pose viz (v0)
 
@@ -52,7 +54,7 @@ Read [`GROK.md`](GROK.md) first.
 | Channel | When it moves |
 |---|---|
 | SteamVR | Whenever SteamVR is running. Holds last pose when SteamVR exits. |
-| Game | When an injector writes `Local\SimSeatLock.Game.v1`. Holds last/zero until then. |
+| Game | When an injector writes `Local\\SimSeatLock.Game.v1`. Holds last/zero until then. |
 | T_rig | Witmotion and/or virtual numeric sliders. Home with **Z**. |
 | Adjusted | Identity while preview is off. Compensated when armed. Desktop numbers only. |
 | Delta | Headset vs adjusted. |
@@ -70,13 +72,17 @@ cmd.exe //c src/SimSeatLock.Layer/build-layer.cmd
 cmd.exe //c src/SimSeatLock.Layer/install-layer.cmd
 cmd.exe //c src/SimSeatLock.OpenVR/build-openvr.cmd
 cmd.exe //c src/SimSeatLock.OpenVR/install-ams2.cmd
+cmd.exe //c src/SimSeatLock.OpenVR/build-acc.cmd
 ```
 
+ACC install is a Bash copy into `OpenVRv1_5_17\\Win64` — see RESEARCH.md.
+`install-ams2.cmd` dies on `Program Files (x86)`.
+
 ```bat
-cd /d C:\Users\Bohnster\sim-seat-lock
+cd /d C:\\Users\\Bohnster\\sim-seat-lock
 dotnet test SimSeatLock.sln -c Release
-dotnet publish src\SimSeatLock.Pose\SimSeatLock.Pose.csproj -c Release -r win-x64 --self-contained false -o publish
-publish\SimSeatLock.Pose.exe
+dotnet publish src\\SimSeatLock.Pose\\SimSeatLock.Pose.csproj -c Release -r win-x64 --self-contained false -o publish
+publish\\SimSeatLock.Pose.exe
 ```
 
 Requires VS 2022 C++ x64. Details: [`src/SimSeatLock.Layer/README.md`](src/SimSeatLock.Layer/README.md), [`src/SimSeatLock.OpenVR/README.md`](src/SimSeatLock.OpenVR/README.md), [`docs/LAYER.md`](docs/LAYER.md), [`docs/AMS2.md`](docs/AMS2.md).
