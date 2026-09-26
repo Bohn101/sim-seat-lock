@@ -5,6 +5,7 @@ EXPORTS
     VR_Shutdown
     VR_IsHmdPresent
     VR_IsRuntimeInstalled
+    VR_GetGenericInterface
     VRSystem
     VRCompositor
     VR_IVRCompositor_WaitGetPoses

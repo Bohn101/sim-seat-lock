@@ -1,7 +1,4 @@
 // SimSeatLock.OpenVR — AMS2 2015 C-API proxy.
-// PE forwards do not run our code, so VR_Init never loaded orig and splash crashed.
-// Init/shutdown/presence/system are real stubs that LoadLibrary openvr_api_orig.dll.
-
 #include "pose_math.h"
 #include "shm.h"
 
@@ -36,6 +33,7 @@ HMODULE gOrig = nullptr;
 SharedMemory gShm;
 float gEyeX = 0.f, gEyeY = 1.10f, gEyeZ = 0.27f;
 bool gGeom = false;
+int gWaitLog = 0;
 
 using WaitGetPoses_t = int (*)(void* instance, TrackedDevicePose* render, uint32_t nRender,
                                TrackedDevicePose* game, uint32_t nGame);
@@ -45,6 +43,7 @@ using Fn0 = void* (*)();
 using FnBool = bool (*)();
 using FnInit = void* (*)(int* peError, int eType);
 using FnShutdown = void (*)();
+using FnGipa = void* (*)(const char* name, int* peError);
 
 WaitGetPoses_t pWaitGetPoses = nullptr;
 WaitGetPoses_t pGetLastPoses = nullptr;
@@ -55,6 +54,9 @@ FnInit pVRInit = nullptr;
 FnShutdown pVRShutdown = nullptr;
 FnBool pIsHmd = nullptr;
 FnBool pIsRuntime = nullptr;
+FnGipa pGipa = nullptr;
+
+void* gOrigWaitVt = nullptr;
 
 void Log(const char* fmt, ...) {
     char path[MAX_PATH]{};
@@ -63,12 +65,8 @@ void Log(const char* fmt, ...) {
                        reinterpret_cast<LPCSTR>(&Log), &self);
     if (self) GetModuleFileNameA(self, path, MAX_PATH);
     char* slash = strrchr(path, '\\');
-    if (slash) {
-        slash[1] = 0;
-        strcat_s(path, "simseatlock-openvr.log");
-    } else {
-        strcpy_s(path, "C:\\Users\\Bohnster\\sim-seat-lock\\publish\\openvr\\simseatlock-openvr.log");
-    }
+    if (slash) { slash[1] = 0; strcat_s(path, "simseatlock-openvr.log"); }
+    else strcpy_s(path, "C:\\Users\\Bohnster\\sim-seat-lock\\publish\\openvr\\simseatlock-openvr.log");
     FILE* f = nullptr;
     fopen_s(&f, path, "a");
     if (!f) return;
@@ -76,10 +74,7 @@ void Log(const char* fmt, ...) {
     GetLocalTime(&st);
     fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d ", st.wYear, st.wMonth, st.wDay,
             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(f, fmt, ap);
-    va_end(ap);
+    va_list ap; va_start(ap, fmt); vfprintf(f, fmt, ap); va_end(ap);
     fputc('\n', f);
     fclose(f);
 }
@@ -148,14 +143,42 @@ void PatchPose(TrackedDevicePose* poses, uint32_t count, int space) {
     const float eyeY = haveRig ? rig.EyeY : gEyeY;
     const float eyeZ = haveRig ? rig.EyeZ : gEyeZ;
     TrackedDevicePose& hmd = poses[kHmdIndex];
-    if (!hmd.poseIsValid) {
-        WriteAlive(space, IdentityRigid());
-        return;
-    }
+    if (!hmd.poseIsValid) { WriteAlive(space, IdentityRigid()); return; }
     Rigid raw = MatrixToRigid(hmd.deviceToAbsolute);
     Rigid view = armed ? ApplyCompensateRigid(raw, rig, eyeX, eyeY, eyeZ) : raw;
     RigidToMatrix(view, &hmd.deviceToAbsolute);
     WriteAlive(space, view);
+}
+
+bool HookVtable(void* iface, int slot, void* hook, void** orig) {
+    if (!iface || slot < 0 || !hook || !orig) return false;
+    void** vt = *reinterpret_cast<void***>(iface);
+    if (!vt) return false;
+    if (vt[slot] == hook) return true;
+    DWORD old = 0;
+    if (!VirtualProtect(&vt[slot], sizeof(void*), PAGE_EXECUTE_READWRITE, &old)) return false;
+    *orig = vt[slot];
+    vt[slot] = hook;
+    VirtualProtect(&vt[slot], sizeof(void*), old, &old);
+    return true;
+}
+
+int HookedWaitGetPoses(void* self, TrackedDevicePose* render, uint32_t nRender,
+                       TrackedDevicePose* game, uint32_t nGame) {
+    auto fn = reinterpret_cast<WaitGetPoses_t>(gOrigWaitVt);
+    const int err = fn ? fn(self, render, nRender, game, nGame) : 0;
+    if (gWaitLog < 3) { Log("WaitGetPoses nR=%u nG=%u err=%d", nRender, nGame, err); ++gWaitLog; }
+    PatchPose(render, nRender, 1);
+    if (game && nGame > 0) PatchPose(game, nGame, 1);
+    return err;
+}
+
+void HookCompositorIface(void* iface, const char* tag) {
+    if (!iface) return;
+    if (HookVtable(iface, 2, reinterpret_cast<void*>(&HookedWaitGetPoses), &gOrigWaitVt))
+        Log("hooked %s WaitGetPoses slot 2", tag);
+    else
+        Log("FAILED hook %s slot 2", tag);
 }
 
 HMODULE LoadOrig() {
@@ -190,9 +213,9 @@ void EnsureOrig() {
     pVRShutdown = reinterpret_cast<FnShutdown>(GetProcAddress(gOrig, "VR_Shutdown"));
     pIsHmd = reinterpret_cast<FnBool>(GetProcAddress(gOrig, "VR_IsHmdPresent"));
     pIsRuntime = reinterpret_cast<FnBool>(GetProcAddress(gOrig, "VR_IsRuntimeInstalled"));
-    Log("orig binds init=%d shut=%d isHmd=%d wait=%d system=%d compositor=%d",
-        pVRInit != nullptr, pVRShutdown != nullptr, pIsHmd != nullptr,
-        pWaitGetPoses != nullptr, pVRSystem != nullptr, pVRCompositor != nullptr);
+    pGipa = reinterpret_cast<FnGipa>(GetProcAddress(gOrig, "VR_GetGenericInterface"));
+    Log("orig binds init=%d gipa=%d wait=%d compositor=%d", pVRInit != nullptr, pGipa != nullptr,
+        pWaitGetPoses != nullptr, pVRCompositor != nullptr);
 }
 
 } // namespace
@@ -225,9 +248,18 @@ __declspec(dllexport) bool VR_IsHmdPresent() {
 
 __declspec(dllexport) bool VR_IsRuntimeInstalled() {
     EnsureOrig();
-    const bool v = pIsRuntime ? pIsRuntime() : false;
-    Log("VR_IsRuntimeInstalled -> %d", v ? 1 : 0);
-    return v;
+    return pIsRuntime ? pIsRuntime() : false;
+}
+
+__declspec(dllexport) void* VR_GetGenericInterface(const char* name, int* peError) {
+    EnsureOrig();
+    void* iface = pGipa ? pGipa(name, peError) : nullptr;
+    Log("GetGenericInterface %s -> %p err=%d", name ? name : "(null)", iface, peError ? *peError : -1);
+    if (iface && name && strncmp(name, "IVRCompositor", 13) == 0)
+        HookCompositorIface(iface, name);
+    if (iface && name && strncmp(name, "FnTable:IVRCompositor", 21) == 0)
+        Log("FnTable compositor — flat exports only, no vtable hook");
+    return iface;
 }
 
 __declspec(dllexport) void* VRSystem() {
@@ -241,6 +273,7 @@ __declspec(dllexport) void* VRSystem() {
 __declspec(dllexport) int VR_IVRCompositor_WaitGetPoses(void* instance, TrackedDevicePose* render, uint32_t nRender,
                                                         TrackedDevicePose* game, uint32_t nGame) {
     EnsureOrig();
+    if (gWaitLog < 3) { Log("flat WaitGetPoses nR=%u nG=%u", nRender, nGame); ++gWaitLog; }
     const int err = pWaitGetPoses ? pWaitGetPoses(instance, render, nRender, game, nGame) : 0;
     PatchPose(render, nRender, 1);
     if (game && nGame > 0) PatchPose(game, nGame, 1);
@@ -265,8 +298,11 @@ __declspec(dllexport) void VR_IVRSystem_GetDeviceToAbsoluteTrackingPose(void* in
 
 __declspec(dllexport) void* VRCompositor() {
     EnsureOrig();
-    WriteAlive(0, IdentityRigid());
-    return pVRCompositor ? pVRCompositor() : nullptr;
+    void* iface = pVRCompositor ? pVRCompositor() : nullptr;
+    Log("VRCompositor -> %p", iface);
+    HookCompositorIface(iface, "VRCompositor");
+    if (iface) WriteAlive(0, IdentityRigid());
+    return iface;
 }
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
