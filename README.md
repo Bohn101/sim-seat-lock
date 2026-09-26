@@ -1,8 +1,10 @@
 # SimSeatLock
 
 Lightweight seat-lock motion compensation for VR sim racing and flight.
-One implicit OpenXR layer. One pose process. One measured chassis sensor
-today; commanded platform pose later, same interface.
+One pose process. One measured chassis sensor today; commanded platform
+pose later, same interface. Injection path is chosen from the running
+exe: implicit OpenXR layer for ACE / LMU, OpenVR `openvr_api.dll` proxy
+for AMS2.
 
 The headset stays in the bucket while a 6DOF platform (ProSimu P5 /
 SimTools) moves.
@@ -13,25 +15,20 @@ T_view = T_cor * inv(T_rig) * inv(T_cor) * T_hmd
 
 `T_cor` is IMU-to-eye from `config/geometry.json`. Head motion relative
 to the seat is kept. Platform rotation and translation are subtracted
-about the center of rotation. Preview off = identity. The layer is what
-changes the headset.
+about the center of rotation. Preview off = identity. The injector is
+what changes the headset.
 
-Ships against SteamVR OpenXR (`steamxr_win64.json`) on PSVR2. Proven on
-Assetto Corsa Evo. Same DLL on Le Mans Ultimate when the title loads
-OpenXR (EAC blocks the protected launcher; offline `Le Mans Ultimate.exe
-+VR` loads the layer). Any native-OpenXR title can use it once the
-loader chains implicit layers.
+Ships against SteamVR on PSVR2. Proven on Assetto Corsa Evo (OpenXR).
+Same OpenXR DLL on Le Mans Ultimate when the title loads OpenXR (EAC
+blocks the protected launcher; offline `Le Mans Ultimate.exe +VR`).
+AMS2 is OpenVR — install `src/SimSeatLock.OpenVR` into
+`Automobilista 2\x64`. See [`docs/AMS2.md`](docs/AMS2.md).
 
-Automobilista 2 is on the EngineWatch list (`AMS2AVX`) so the Engine lamp
-goes green. Stock SteamVR AMS2 is OpenVR. The Layer lamp stays red until
-the title creates an OpenXR instance. Restarting Pose does not attach it.
-See [`docs/AMS2.md`](docs/AMS2.md).
-
-| Now (v0.2.2) | Next |
+| Now (v0.2.3) | Next |
 |---|---|
 | Witmotion serial IMU (COM8 / 115200), Home, ≥250 Hz shared memory | Predictive `T_rig` from the motion-command stream, IMU residual |
-| Thin `xrLocateViews` layer, arm/disarm, CoR from geometry.json | Same layer, second `IPoseSource` |
-| ACE + LMU native OpenXR; AMS2 / iRacing names in `game_processes` | AMS2 only if it negotiates OpenXR (measure `layer.log`) |
+| OpenXR layer (ACE / LMU) + OpenVR proxy (AMS2), same T_view | Same injectors, second `IPoseSource` |
+| Exe-based path: ACE/LMU = openxr, AMS2/iRacing = openvr | More titles after we measure how they talk VR |
 
 **Not** SimHub Motion, SRS IntelliComp, FlyPT Mover, or SimTools as a
 pose source. **Not** BuzzteeBear OXRMC. Those stacks feed washout or a
@@ -55,7 +52,7 @@ Read [`GROK.md`](GROK.md) first.
 | Channel | When it moves |
 |---|---|
 | SteamVR | Whenever SteamVR is running. Holds last pose when SteamVR exits. |
-| Game OpenXR | When `SimSeatLock.Layer` writes `Local\SimSeatLock.Game.v1` from `xrLocateViews`. Holds last/zero until then. |
+| Game | When an injector writes `Local\SimSeatLock.Game.v1`. Holds last/zero until then. |
 | T_rig | Witmotion and/or virtual numeric sliders. Home with **Z**. |
 | Adjusted | Identity while preview is off. Compensated when armed. Desktop numbers only. |
 | Delta | Headset vs adjusted. |
@@ -69,9 +66,10 @@ Git Bash:
 ```bash
 cd /c/Users/Bohnster/sim-seat-lock
 git pull origin main
-cd src/SimSeatLock.Layer
-cmd.exe //c build-layer.cmd
-cmd.exe //c install-layer.cmd
+cmd.exe //c src/SimSeatLock.Layer/build-layer.cmd
+cmd.exe //c src/SimSeatLock.Layer/install-layer.cmd
+cmd.exe //c src/SimSeatLock.OpenVR/build-openvr.cmd
+cmd.exe //c src/SimSeatLock.OpenVR/install-ams2.cmd
 ```
 
 ```bat
@@ -81,7 +79,7 @@ dotnet publish src\SimSeatLock.Pose\SimSeatLock.Pose.csproj -c Release -r win-x6
 publish\SimSeatLock.Pose.exe
 ```
 
-Requires VS 2022 C++ x64. Details: [`src/SimSeatLock.Layer/README.md`](src/SimSeatLock.Layer/README.md), [`docs/LAYER.md`](docs/LAYER.md).
+Requires VS 2022 C++ x64. Details: [`src/SimSeatLock.Layer/README.md`](src/SimSeatLock.Layer/README.md), [`src/SimSeatLock.OpenVR/README.md`](src/SimSeatLock.OpenVR/README.md), [`docs/LAYER.md`](docs/LAYER.md), [`docs/AMS2.md`](docs/AMS2.md).
 
 Defaults: Witmotion COM8, 115200. Home and title Reset View only at SimTools
 neutral with compensation disarmed. SteamVR Motion Smoothing off while
