@@ -6,9 +6,11 @@
 #include "math.h"
 #include "shm.h"
 
+#include <cmath>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <windows.h>
 
@@ -111,25 +113,25 @@ Rigid MatrixToRigid(const HmdMatrix34& m) {
     r.pz = m.m[2][3];
     const float t = m.m[0][0] + m.m[1][1] + m.m[2][2];
     if (t > 0.f) {
-        const float s = sqrtf(t + 1.f) * 2.f;
+        const float s = std::sqrt(t + 1.f) * 2.f;
         r.qw = 0.25f * s;
         r.qx = (m.m[2][1] - m.m[1][2]) / s;
         r.qy = (m.m[0][2] - m.m[2][0]) / s;
         r.qz = (m.m[1][0] - m.m[0][1]) / s;
     } else if (m.m[0][0] > m.m[1][1] && m.m[0][0] > m.m[2][2]) {
-        const float s = sqrtf(1.f + m.m[0][0] - m.m[1][1] - m.m[2][2]) * 2.f;
+        const float s = std::sqrt(1.f + m.m[0][0] - m.m[1][1] - m.m[2][2]) * 2.f;
         r.qw = (m.m[2][1] - m.m[1][2]) / s;
         r.qx = 0.25f * s;
         r.qy = (m.m[0][1] + m.m[1][0]) / s;
         r.qz = (m.m[0][2] + m.m[2][0]) / s;
     } else if (m.m[1][1] > m.m[2][2]) {
-        const float s = sqrtf(1.f + m.m[1][1] - m.m[0][0] - m.m[2][2]) * 2.f;
+        const float s = std::sqrt(1.f + m.m[1][1] - m.m[0][0] - m.m[2][2]) * 2.f;
         r.qw = (m.m[0][2] - m.m[2][0]) / s;
         r.qx = (m.m[0][1] + m.m[1][0]) / s;
         r.qy = 0.25f * s;
         r.qz = (m.m[1][2] + m.m[2][1]) / s;
     } else {
-        const float s = sqrtf(1.f + m.m[2][2] - m.m[0][0] - m.m[1][1]) * 2.f;
+        const float s = std::sqrt(1.f + m.m[2][2] - m.m[0][0] - m.m[1][1]) * 2.f;
         r.qw = (m.m[1][0] - m.m[0][1]) / s;
         r.qx = (m.m[0][2] + m.m[2][0]) / s;
         r.qy = (m.m[1][2] + m.m[2][1]) / s;

@@ -1,6 +1,6 @@
 #include "math.h"
 
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -22,7 +22,7 @@ static void QuatConj(float x, float y, float z, float w, float* cx, float* cy, f
 }
 
 static void QuatNorm(float* x, float* y, float* z, float* w) {
-    const float n = sqrtf((*x) * (*x) + (*y) * (*y) + (*z) * (*z) + (*w) * (*w));
+    const float n = std::sqrt((*x) * (*x) + (*y) * (*y) + (*z) * (*z) + (*w) * (*w));
     if (n < 1e-12f) {
         *x = 0;
         *y = 0;
@@ -54,9 +54,9 @@ static void EulerDegToQuat(float rollDeg, float pitchDeg, float yawDeg,
     const float x = -pitchDeg * 3.14159265358979323846f / 180.0f;
     const float y = -yawDeg * 3.14159265358979323846f / 180.0f;
     const float z = -rollDeg * 3.14159265358979323846f / 180.0f;
-    const float cx = cosf(x * 0.5f), sx = sinf(x * 0.5f);
-    const float cy = cosf(y * 0.5f), sy = sinf(y * 0.5f);
-    const float cz = cosf(z * 0.5f), sz = sinf(z * 0.5f);
+    const float cx = std::cos(x * 0.5f), sx = std::sin(x * 0.5f);
+    const float cy = std::cos(y * 0.5f), sy = std::sin(y * 0.5f);
+    const float cz = std::cos(z * 0.5f), sz = std::sin(z * 0.5f);
     *qw = cx * cy * cz + sx * sy * sz;
     *qx = sx * cy * cz - cx * sy * sz;
     *qy = cx * sy * cz + sx * cy * sz;
