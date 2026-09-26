@@ -1,7 +1,6 @@
-// SimSeatLock.OpenVR — drop-in openvr_api.dll for AMS2.
-// AMS2 ships the 2015 OpenVR C API (VR_Init, VR_IVRCompositor_WaitGetPoses,
-// UnityHooks_*, 253 exports). We forward those to openvr_api_orig.dll and
-// intercept only the flat pose calls.
+// SimSeatLock.OpenVR — AMS2 2015 C-API proxy.
+// PE forwards do not run our code, so VR_Init never loaded orig and splash crashed.
+// Init/shutdown/presence/system are real stubs that LoadLibrary openvr_api_orig.dll.
 
 #include "pose_math.h"
 #include "shm.h"
@@ -18,12 +17,8 @@ namespace {
 constexpr uint32_t kHmdIndex = 0;
 
 #pragma pack(push, 8)
-struct HmdMatrix34 {
-    float m[3][4];
-};
-struct HmdVector3 {
-    float v[3];
-};
+struct HmdMatrix34 { float m[3][4]; };
+struct HmdVector3 { float v[3]; };
 struct TrackedDevicePose {
     HmdMatrix34 deviceToAbsolute;
     HmdVector3 velocity;
@@ -44,16 +39,22 @@ bool gGeom = false;
 
 using WaitGetPoses_t = int (*)(void* instance, TrackedDevicePose* render, uint32_t nRender,
                                TrackedDevicePose* game, uint32_t nGame);
-using GetLastPoses_t = int (*)(void* instance, TrackedDevicePose* render, uint32_t nRender,
-                               TrackedDevicePose* game, uint32_t nGame);
 using GetDevicePose_t = void (*)(void* instance, int origin, float pred,
                                  TrackedDevicePose* poses, uint32_t count);
-using VRCompositor_t = void* (*)();
+using Fn0 = void* (*)();
+using FnBool = bool (*)();
+using FnInit = void* (*)(int* peError, int eType);
+using FnShutdown = void (*)();
 
 WaitGetPoses_t pWaitGetPoses = nullptr;
-GetLastPoses_t pGetLastPoses = nullptr;
+WaitGetPoses_t pGetLastPoses = nullptr;
 GetDevicePose_t pGetDevicePose = nullptr;
-VRCompositor_t pVRCompositor = nullptr;
+Fn0 pVRCompositor = nullptr;
+Fn0 pVRSystem = nullptr;
+FnInit pVRInit = nullptr;
+FnShutdown pVRShutdown = nullptr;
+FnBool pIsHmd = nullptr;
+FnBool pIsRuntime = nullptr;
 
 void Log(const char* fmt, ...) {
     char path[MAX_PATH]{};
@@ -91,9 +92,7 @@ void EnsureGeom() {
 
 Rigid MatrixToRigid(const HmdMatrix34& m) {
     Rigid r{};
-    r.px = m.m[0][3];
-    r.py = m.m[1][3];
-    r.pz = m.m[2][3];
+    r.px = m.m[0][3]; r.py = m.m[1][3]; r.pz = m.m[2][3];
     const float t = m.m[0][0] + m.m[1][1] + m.m[2][2];
     if (t > 0.f) {
         const float s = std::sqrt(t + 1.f) * 2.f;
@@ -103,22 +102,16 @@ Rigid MatrixToRigid(const HmdMatrix34& m) {
         r.qz = (m.m[1][0] - m.m[0][1]) / s;
     } else if (m.m[0][0] > m.m[1][1] && m.m[0][0] > m.m[2][2]) {
         const float s = std::sqrt(1.f + m.m[0][0] - m.m[1][1] - m.m[2][2]) * 2.f;
-        r.qw = (m.m[2][1] - m.m[1][2]) / s;
-        r.qx = 0.25f * s;
-        r.qy = (m.m[0][1] + m.m[1][0]) / s;
-        r.qz = (m.m[0][2] + m.m[2][0]) / s;
+        r.qw = (m.m[2][1] - m.m[1][2]) / s; r.qx = 0.25f * s;
+        r.qy = (m.m[0][1] + m.m[1][0]) / s; r.qz = (m.m[0][2] + m.m[2][0]) / s;
     } else if (m.m[1][1] > m.m[2][2]) {
         const float s = std::sqrt(1.f + m.m[1][1] - m.m[0][0] - m.m[2][2]) * 2.f;
-        r.qw = (m.m[0][2] - m.m[2][0]) / s;
-        r.qx = (m.m[0][1] + m.m[1][0]) / s;
-        r.qy = 0.25f * s;
-        r.qz = (m.m[1][2] + m.m[2][1]) / s;
+        r.qw = (m.m[0][2] - m.m[2][0]) / s; r.qx = (m.m[0][1] + m.m[1][0]) / s;
+        r.qy = 0.25f * s; r.qz = (m.m[1][2] + m.m[2][1]) / s;
     } else {
         const float s = std::sqrt(1.f + m.m[2][2] - m.m[0][0] - m.m[1][1]) * 2.f;
-        r.qw = (m.m[1][0] - m.m[0][1]) / s;
-        r.qx = (m.m[0][2] + m.m[2][0]) / s;
-        r.qy = (m.m[1][2] + m.m[2][1]) / s;
-        r.qz = 0.25f * s;
+        r.qw = (m.m[1][0] - m.m[0][1]) / s; r.qx = (m.m[0][2] + m.m[2][0]) / s;
+        r.qy = (m.m[1][2] + m.m[2][1]) / s; r.qz = 0.25f * s;
     }
     return r;
 }
@@ -128,18 +121,9 @@ void RigidToMatrix(const Rigid& r, HmdMatrix34* m) {
     const float xx = x * x, yy = y * y, zz = z * z;
     const float xy = x * y, xz = x * z, yz = y * z;
     const float wx = w * x, wy = w * y, wz = w * z;
-    m->m[0][0] = 1.f - 2.f * (yy + zz);
-    m->m[0][1] = 2.f * (xy - wz);
-    m->m[0][2] = 2.f * (xz + wy);
-    m->m[0][3] = r.px;
-    m->m[1][0] = 2.f * (xy + wz);
-    m->m[1][1] = 1.f - 2.f * (xx + zz);
-    m->m[1][2] = 2.f * (yz - wx);
-    m->m[1][3] = r.py;
-    m->m[2][0] = 2.f * (xz - wy);
-    m->m[2][1] = 2.f * (yz + wx);
-    m->m[2][2] = 1.f - 2.f * (xx + yy);
-    m->m[2][3] = r.pz;
+    m->m[0][0] = 1.f - 2.f * (yy + zz); m->m[0][1] = 2.f * (xy - wz); m->m[0][2] = 2.f * (xz + wy); m->m[0][3] = r.px;
+    m->m[1][0] = 2.f * (xy + wz); m->m[1][1] = 1.f - 2.f * (xx + zz); m->m[1][2] = 2.f * (yz - wx); m->m[1][3] = r.py;
+    m->m[2][0] = 2.f * (xz - wy); m->m[2][1] = 2.f * (yz + wx); m->m[2][2] = 1.f - 2.f * (xx + yy); m->m[2][3] = r.pz;
 }
 
 void WriteAlive(int space, const Rigid& hmd) {
@@ -169,8 +153,7 @@ void PatchPose(TrackedDevicePose* poses, uint32_t count, int space) {
         return;
     }
     Rigid raw = MatrixToRigid(hmd.deviceToAbsolute);
-    Rigid view = raw;
-    if (armed) view = ApplyCompensateRigid(raw, rig, eyeX, eyeY, eyeZ);
+    Rigid view = armed ? ApplyCompensateRigid(raw, rig, eyeX, eyeY, eyeZ) : raw;
     RigidToMatrix(view, &hmd.deviceToAbsolute);
     WriteAlive(space, view);
 }
@@ -189,8 +172,8 @@ HMODULE LoadOrig() {
         sprintf_s(path, "%s\\%s", dir, n);
         HMODULE m = LoadLibraryA(path);
         if (m) { Log("orig %s", path); return m; }
+        Log("LoadLibrary failed %s gle=%lu", path, GetLastError());
     }
-    Log("no orig openvr_api next to proxy");
     return nullptr;
 }
 
@@ -199,11 +182,17 @@ void EnsureOrig() {
     gOrig = LoadOrig();
     if (!gOrig) return;
     pWaitGetPoses = reinterpret_cast<WaitGetPoses_t>(GetProcAddress(gOrig, "VR_IVRCompositor_WaitGetPoses"));
-    pGetLastPoses = reinterpret_cast<GetLastPoses_t>(GetProcAddress(gOrig, "VR_IVRCompositor_GetLastPoses"));
+    pGetLastPoses = reinterpret_cast<WaitGetPoses_t>(GetProcAddress(gOrig, "VR_IVRCompositor_GetLastPoses"));
     pGetDevicePose = reinterpret_cast<GetDevicePose_t>(GetProcAddress(gOrig, "VR_IVRSystem_GetDeviceToAbsoluteTrackingPose"));
-    pVRCompositor = reinterpret_cast<VRCompositor_t>(GetProcAddress(gOrig, "VRCompositor"));
-    Log("orig binds wait=%d last=%d device=%d compositor=%d", pWaitGetPoses != nullptr,
-        pGetLastPoses != nullptr, pGetDevicePose != nullptr, pVRCompositor != nullptr);
+    pVRCompositor = reinterpret_cast<Fn0>(GetProcAddress(gOrig, "VRCompositor"));
+    pVRSystem = reinterpret_cast<Fn0>(GetProcAddress(gOrig, "VRSystem"));
+    pVRInit = reinterpret_cast<FnInit>(GetProcAddress(gOrig, "VR_Init"));
+    pVRShutdown = reinterpret_cast<FnShutdown>(GetProcAddress(gOrig, "VR_Shutdown"));
+    pIsHmd = reinterpret_cast<FnBool>(GetProcAddress(gOrig, "VR_IsHmdPresent"));
+    pIsRuntime = reinterpret_cast<FnBool>(GetProcAddress(gOrig, "VR_IsRuntimeInstalled"));
+    Log("orig binds init=%d shut=%d isHmd=%d wait=%d system=%d compositor=%d",
+        pVRInit != nullptr, pVRShutdown != nullptr, pIsHmd != nullptr,
+        pWaitGetPoses != nullptr, pVRSystem != nullptr, pVRCompositor != nullptr);
 }
 
 } // namespace
@@ -211,6 +200,43 @@ void EnsureOrig() {
 extern "C" {
 
 __declspec(dllexport) int SSL_IsOpenVrProxy() { return 1; }
+
+__declspec(dllexport) void* VR_Init(int* peError, int eType) {
+    EnsureOrig();
+    Log("VR_Init type=%d orig=%p", eType, pVRInit);
+    void* sys = pVRInit ? pVRInit(peError, eType) : nullptr;
+    Log("VR_Init -> %p err=%d", sys, peError ? *peError : -1);
+    if (sys) WriteAlive(0, IdentityRigid());
+    return sys;
+}
+
+__declspec(dllexport) void VR_Shutdown() {
+    EnsureOrig();
+    Log("VR_Shutdown");
+    if (pVRShutdown) pVRShutdown();
+}
+
+__declspec(dllexport) bool VR_IsHmdPresent() {
+    EnsureOrig();
+    const bool v = pIsHmd ? pIsHmd() : false;
+    Log("VR_IsHmdPresent -> %d", v ? 1 : 0);
+    return v;
+}
+
+__declspec(dllexport) bool VR_IsRuntimeInstalled() {
+    EnsureOrig();
+    const bool v = pIsRuntime ? pIsRuntime() : false;
+    Log("VR_IsRuntimeInstalled -> %d", v ? 1 : 0);
+    return v;
+}
+
+__declspec(dllexport) void* VRSystem() {
+    EnsureOrig();
+    void* sys = pVRSystem ? pVRSystem() : nullptr;
+    Log("VRSystem -> %p", sys);
+    if (sys) WriteAlive(0, IdentityRigid());
+    return sys;
+}
 
 __declspec(dllexport) int VR_IVRCompositor_WaitGetPoses(void* instance, TrackedDevicePose* render, uint32_t nRender,
                                                         TrackedDevicePose* game, uint32_t nGame) {

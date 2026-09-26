@@ -1,7 +1,12 @@
 LIBRARY openvr_api
 EXPORTS
     SSL_IsOpenVrProxy
+    VR_Init
+    VR_Shutdown
+    VR_IsHmdPresent
+    VR_IsRuntimeInstalled
+    VRSystem
+    VRCompositor
     VR_IVRCompositor_WaitGetPoses
     VR_IVRCompositor_GetLastPoses
     VR_IVRSystem_GetDeviceToAbsoluteTrackingPose
-    VRCompositor
