@@ -79,7 +79,7 @@
     <ClCompile Include="shm.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="math.h" />
+    <ClInclude Include="pose_math.h" />
     <ClInclude Include="openxr_min.h" />
     <ClInclude Include="shm.h" />
   </ItemGroup>

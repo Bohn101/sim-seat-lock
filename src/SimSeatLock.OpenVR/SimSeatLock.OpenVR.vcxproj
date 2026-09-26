@@ -81,7 +81,7 @@
     <ClCompile Include="..\SimSeatLock.Layer\shm.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\SimSeatLock.Layer\math.h" />
+    <ClInclude Include="..\SimSeatLock.Layer\pose_math.h" />
     <ClInclude Include="..\SimSeatLock.Layer\shm.h" />
     <ClInclude Include="..\SimSeatLock.Layer\openxr_min.h" />
   </ItemGroup>

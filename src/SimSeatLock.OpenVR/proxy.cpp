@@ -3,7 +3,7 @@
 // vtable-hooks compositor poses, applies the same T_view product as the
 // OpenXR layer, writes Local\\SimSeatLock.Game.v1.
 
-#include "math.h"
+#include "pose_math.h"
 #include "shm.h"
 
 #include <cmath>

@@ -4,7 +4,7 @@
 
 #include "openxr_min.h"
 #include "shm.h"
-#include "math.h"
+#include "pose_math.h"
 
 #include <stdarg.h>
 #include <stdio.h>
