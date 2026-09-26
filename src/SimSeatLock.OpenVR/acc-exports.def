@@ -1,27 +1,9 @@
 LIBRARY openvr_api
 EXPORTS
     SSL_IsOpenVrProxy
-    LiquidVR = openvr_api_orig.LiquidVR
-    VRCompositorSystemInternal = openvr_api_orig.VRCompositorSystemInternal
-    VRControlPanel = openvr_api_orig.VRControlPanel
-    VRDashboardManager = openvr_api_orig.VRDashboardManager
-    VROculusDirect = openvr_api_orig.VROculusDirect
-    VROverlayView = openvr_api_orig.VROverlayView
-    VRPaths = openvr_api_orig.VRPaths
-    VRRenderModelsInternal = openvr_api_orig.VRRenderModelsInternal
-    VRSceneGraph = openvr_api_orig.VRSceneGraph
-    VRTrackedCameraInternal = openvr_api_orig.VRTrackedCameraInternal
-    VRVirtualDisplay = openvr_api_orig.VRVirtualDisplay
     VR_GetGenericInterface
-    VR_GetInitToken = openvr_api_orig.VR_GetInitToken
-    VR_GetRuntimePath = openvr_api_orig.VR_GetRuntimePath
-    VR_GetStringForHmdError = openvr_api_orig.VR_GetStringForHmdError
-    VR_GetVRInitErrorAsEnglishDescription = openvr_api_orig.VR_GetVRInitErrorAsEnglishDescription
-    VR_GetVRInitErrorAsSymbol = openvr_api_orig.VR_GetVRInitErrorAsSymbol
     VR_InitInternal
     VR_InitInternal2
     VR_IsHmdPresent
-    VR_IsInterfaceVersionValid = openvr_api_orig.VR_IsInterfaceVersionValid
     VR_IsRuntimeInstalled
-    VR_RuntimePath = openvr_api_orig.VR_RuntimePath
     VR_ShutdownInternal
