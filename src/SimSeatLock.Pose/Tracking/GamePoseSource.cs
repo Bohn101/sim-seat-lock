@@ -3,8 +3,8 @@ using SimSeatLock.Pose.Publish;
 namespace SimSeatLock.Pose.Tracking;
 
 /// <summary>
-/// Reads Local\SimSeatLock.Game.v1 written by SimSeatLock.Layer.
-/// Holds last / zero and stays !Valid until the layer is loaded.
+/// Reads Local\SimSeatLock.Game.v1 written by SimSeatLock.Layer (OpenXR)
+/// or SimSeatLock.OpenVR (openvr_api proxy). Holds last / zero until then.
 /// Does not invent a pose from the engine process.
 /// </summary>
 public sealed class GamePoseSource : IDisposable
@@ -15,7 +15,7 @@ public sealed class GamePoseSource : IDisposable
     Task? _loop;
     RigidPose _left = RigidPose.Dead with { Space = "game" };
     RigidPose _right = RigidPose.Dead with { Space = "game-right" };
-    string _detail = "waiting for layer";
+    string _detail = "waiting for inject";
     bool _layerLive;
     uint _lastSeq;
     DateTime _lastPollUtc = DateTime.UnixEpoch;
@@ -35,13 +35,16 @@ public sealed class GamePoseSource : IDisposable
             _watch.Poll();
             if (_watch.Detected)
             {
+                string path = EngineWatch.InjectionPath(_watch.Status);
                 if (LayerLive)
-                    return $"engine up ({_watch.Status}), layer live";
-                if (EngineWatch.LooksOpenVrNative(_watch.Status))
-                    return $"engine up ({_watch.Status}), OpenVR title — waiting for OpenXR";
-                return $"engine up ({_watch.Status}), waiting for layer";
+                    return $"engine up ({_watch.Status}), {path} live";
+                if (path == "openvr")
+                    return $"engine up ({_watch.Status}), OpenVR — install proxy";
+                if (path == "openxr")
+                    return $"engine up ({_watch.Status}), waiting for OpenXR layer";
+                return $"engine up ({_watch.Status}), waiting for inject";
             }
-            return LayerLive ? "layer live, no engine" : "waiting for layer";
+            return LayerLive ? "inject live, no engine" : "waiting for inject";
         }
     }
 
@@ -103,14 +106,21 @@ public sealed class GamePoseSource : IDisposable
                     _right = right;
                     _layerLive = true;
                     _lastSeq = block.Sequence;
-                    _detail = $"layer seq {block.Sequence}";
+                    _detail = $"inject seq {block.Sequence}";
                 }
             }
             else
             {
-                string wait = "waiting for layer";
-                if (_watch.Detected && EngineWatch.LooksOpenVrNative(_watch.Status))
-                    wait = "OpenVR title — layer attaches only after OpenXR negotiate";
+                string wait = "waiting for inject";
+                if (_watch.Detected)
+                {
+                    var path = EngineWatch.InjectionPath(_watch.Status);
+                    wait = path == "openvr"
+                        ? "OpenVR title — drop-in openvr_api.dll not loaded"
+                        : path == "openxr"
+                            ? "OpenXR title — layer not negotiated"
+                            : wait;
+                }
                 lock (_gate)
                 {
                     _layerLive = false;

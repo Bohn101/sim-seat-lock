@@ -30,15 +30,30 @@ public sealed class EngineWatch
             .Select(n => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n[..^4] : n)
             .ToArray();
 
-    /// <summary>
-    /// Titles that ship OpenVR / LibOVR first. EngineWatch can see them while
-    /// the implicit OpenXR layer never LoadLibrarys. ACE / LMU are native OpenXR.
-    /// </summary>
+    /// <summary>OpenVR-first titles. Layer attach is the OpenVR proxy, not Khronos.</summary>
     public static bool LooksOpenVrNative(string processName)
     {
         if (string.IsNullOrWhiteSpace(processName)) return false;
         return processName.Contains("AMS2", StringComparison.OrdinalIgnoreCase)
             || processName.Contains("iRacing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Native OpenXR titles. Implicit layer path.</summary>
+    public static bool LooksOpenXrNative(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+        return processName.Contains("AssettoCorsa", StringComparison.OrdinalIgnoreCase)
+            || processName.Contains("assetto_corsa", StringComparison.OrdinalIgnoreCase)
+            || processName.Contains("Le Mans", StringComparison.OrdinalIgnoreCase)
+            || processName.Contains("LeMans", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>openxr | openvr | unknown — chosen from the running exe name.</summary>
+    public static string InjectionPath(string processName)
+    {
+        if (LooksOpenVrNative(processName)) return "openvr";
+        if (LooksOpenXrNative(processName)) return "openxr";
+        return "unknown";
     }
 
     public void Poll()
