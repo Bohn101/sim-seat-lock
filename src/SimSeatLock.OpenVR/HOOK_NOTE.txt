@@ -1,0 +1,2 @@
+// Probe: do not vtable-hook IVRCompositor until AMS2 survives splash.
+// GetGenericInterface still logs the version. Flat WaitGetPoses still patches.
