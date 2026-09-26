@@ -78,9 +78,11 @@
   <ItemGroup>
     <ClCompile Include="proxy-acc.cpp" />
     <ClCompile Include="acc-forwards.cpp" />
+    <ClCompile Include="..\SimSeatLock.Layer\math.cpp" />
     <ClCompile Include="..\SimSeatLock.Layer\shm.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\SimSeatLock.Layer\pose_math.h" />
     <ClInclude Include="..\SimSeatLock.Layer\shm.h" />
     <None Include="acc-exports.def" />
   </ItemGroup>
