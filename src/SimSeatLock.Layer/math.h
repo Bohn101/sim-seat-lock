@@ -15,5 +15,6 @@ Rigid IdentityRigid();
 Rigid FromRig(const RigBlock& rig);
 Rigid Inverse(const Rigid& t);
 Rigid Compose(const Rigid& a, const Rigid& b);
+Rigid ApplyCompensateRigid(const Rigid& hmd, const RigBlock& rig, float eyeX, float eyeY, float eyeZ);
 XrPosef ApplyCompensate(const XrPosef& hmd, const RigBlock& rig, float eyeX, float eyeY, float eyeZ);
 void LoadGeometry(float* eyeX, float* eyeY, float* eyeZ);

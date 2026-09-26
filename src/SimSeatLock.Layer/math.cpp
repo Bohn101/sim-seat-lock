@@ -100,12 +100,17 @@ Rigid Compose(const Rigid& a, const Rigid& b) {
     return o;
 }
 
-XrPosef ApplyCompensate(const XrPosef& hmd, const RigBlock& rig, float eyeX, float eyeY, float eyeZ) {
+Rigid ApplyCompensateRigid(const Rigid& hmd, const RigBlock& rig, float eyeX, float eyeY, float eyeZ) {
     Rigid cor{eyeX, eyeY, eyeZ, 0, 0, 0, 1};
+    Rigid tHmd = hmd;
+    if (tHmd.qx == 0 && tHmd.qy == 0 && tHmd.qz == 0 && tHmd.qw == 0) tHmd.qw = 1;
+    return Compose(cor, Compose(Inverse(FromRig(rig)), Compose(Inverse(cor), tHmd)));
+}
+
+XrPosef ApplyCompensate(const XrPosef& hmd, const RigBlock& rig, float eyeX, float eyeY, float eyeZ) {
     Rigid tHmd{hmd.position.x, hmd.position.y, hmd.position.z,
                hmd.orientation.x, hmd.orientation.y, hmd.orientation.z, hmd.orientation.w};
-    if (tHmd.qx == 0 && tHmd.qy == 0 && tHmd.qz == 0 && tHmd.qw == 0) tHmd.qw = 1;
-    const Rigid view = Compose(cor, Compose(Inverse(FromRig(rig)), Compose(Inverse(cor), tHmd)));
+    const Rigid view = ApplyCompensateRigid(tHmd, rig, eyeX, eyeY, eyeZ);
     XrPosef out = hmd;
     out.position.x = view.px;
     out.position.y = view.py;
