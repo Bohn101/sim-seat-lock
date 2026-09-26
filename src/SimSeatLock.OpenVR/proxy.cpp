@@ -1,7 +1,9 @@
 // SimSeatLock.OpenVR — drop-in openvr_api.dll for OpenVR titles (AMS2).
 // Loads openvr_api.stock.dll from the same folder, forwards VR_* exports,
-// vtable-hooks compositor poses, applies the same T_view product as the
-// OpenXR layer, writes Local\\SimSeatLock.Game.v1.
+// vtable-hooks IVRCompositor::WaitGetPoses only, writes Game.v1.
+//
+// Do not LoadLibrary from DllMain (loader lock). Stock is bound on first export.
+// Set SIMSEATLOCK_OPENVR_PASSTHROUGH=1 to forward with no hooks.
 
 #include "pose_math.h"
 #include "shm.h"
@@ -42,11 +44,10 @@ HMODULE gStock = nullptr;
 SharedMemory gShm;
 float gEyeX = 0.f, gEyeY = 1.10f, gEyeZ = 0.27f;
 bool gGeom = false;
+bool gPassthrough = false;
+bool gEnvRead = false;
 
 void* gOrigWaitGetPoses = nullptr;
-void* gOrigGetLastPoses = nullptr;
-void* gOrigGetDevicePose = nullptr;
-void* gOrigGetLastPoseIndex = nullptr;
 
 using Fn_Init = uint32_t (*)(int* peError, int eType);
 using Fn_Init2 = uint32_t (*)(int* peError, int eType, const char* info);
@@ -207,10 +208,6 @@ bool HookVtable(void* iface, int slot, void* hook, void** orig) {
 
 using WaitGetPoses_t = int (*)(void* self, TrackedDevicePose* render, uint32_t nRender,
                                TrackedDevicePose* game, uint32_t nGame);
-using GetDevicePose_t = void (*)(void* self, int origin, float pred,
-                                 TrackedDevicePose* poses, uint32_t count);
-using GetLastPoseIndex_t = int (*)(void* self, uint32_t index,
-                                   TrackedDevicePose* render, TrackedDevicePose* game);
 
 int HookedWaitGetPoses(void* self, TrackedDevicePose* render, uint32_t nRender,
                        TrackedDevicePose* game, uint32_t nGame) {
@@ -221,52 +218,15 @@ int HookedWaitGetPoses(void* self, TrackedDevicePose* render, uint32_t nRender,
     return err;
 }
 
-int HookedGetLastPoses(void* self, TrackedDevicePose* render, uint32_t nRender,
-                       TrackedDevicePose* game, uint32_t nGame) {
-    auto fn = reinterpret_cast<WaitGetPoses_t>(gOrigGetLastPoses);
-    const int err = fn ? fn(self, render, nRender, game, nGame) : 0;
-    PatchPose(render, nRender, 1);
-    if (game && nGame > 0) PatchPose(game, nGame, 1);
-    return err;
-}
-
-void HookedGetDevicePose(void* self, int origin, float pred, TrackedDevicePose* poses, uint32_t count) {
-    auto fn = reinterpret_cast<GetDevicePose_t>(gOrigGetDevicePose);
-    if (fn) fn(self, origin, pred, poses, count);
-    PatchPose(poses, count, origin);
-}
-
-int HookedGetLastPoseIndex(void* self, uint32_t index, TrackedDevicePose* render, TrackedDevicePose* game) {
-    auto fn = reinterpret_cast<GetLastPoseIndex_t>(gOrigGetLastPoseIndex);
-    const int err = fn ? fn(self, index, render, game) : 0;
-    if (index == kHmdIndex) {
-        if (render) PatchPose(render, 1, 1);
-        if (game) PatchPose(game, 1, 1);
-    }
-    return err;
-}
-
-int SystemPoseSlot(const char* name) {
-    const char* us = strrchr(name, '_');
-    const int ver = us ? atoi(us + 1) : 22;
-    if (ver >= 26) return 12;
-    if (ver >= 17) return 11;
-    return 10;
-}
-
-void HookSystem(void* iface, const char* name) {
-    const int slot = SystemPoseSlot(name);
-    if (HookVtable(iface, slot, reinterpret_cast<void*>(&HookedGetDevicePose), &gOrigGetDevicePose))
-        Log("hooked %s GetDeviceToAbsoluteTrackingPose slot %d", name, slot);
-    else
-        Log("FAILED hook %s slot %d", name, slot);
-}
-
 void HookCompositor(void* iface, const char* name) {
+    if (gPassthrough) {
+        Log("passthrough: skip hook %s", name);
+        return;
+    }
     if (HookVtable(iface, 2, reinterpret_cast<void*>(&HookedWaitGetPoses), &gOrigWaitGetPoses))
         Log("hooked %s WaitGetPoses slot 2", name);
-    HookVtable(iface, 3, reinterpret_cast<void*>(&HookedGetLastPoses), &gOrigGetLastPoses);
-    HookVtable(iface, 4, reinterpret_cast<void*>(&HookedGetLastPoseIndex), &gOrigGetLastPoseIndex);
+    else
+        Log("FAILED hook %s WaitGetPoses slot 2", name);
 }
 
 HMODULE LoadStock() {
@@ -302,6 +262,23 @@ void BindStock(HMODULE m) {
     if (!pErrEng) pErrEng = reinterpret_cast<Fn_ErrStr>(GetProcAddress(m, "VR_GetStringForHmdError"));
     pRuntimeOld = reinterpret_cast<Fn_RuntimePathOld>(GetProcAddress(m, "VR_RuntimePath"));
     pRuntimePath = reinterpret_cast<Fn_GetRuntimePath>(GetProcAddress(m, "VR_GetRuntimePath"));
+    Log("stock binds init=%d init2=%d gipa=%d isHmd=%d", pInit != nullptr, pInit2 != nullptr,
+        pGetIface != nullptr, pIsHmd != nullptr);
+}
+
+void ReadEnv() {
+    if (gEnvRead) return;
+    gEnvRead = true;
+    char buf[8]{};
+    if (GetEnvironmentVariableA("SIMSEATLOCK_OPENVR_PASSTHROUGH", buf, sizeof(buf)) > 0 && buf[0] == '1')
+        gPassthrough = true;
+}
+
+void EnsureStock() {
+    ReadEnv();
+    if (gStock) return;
+    gStock = LoadStock();
+    if (gStock) BindStock(gStock);
 }
 
 } // namespace
@@ -311,27 +288,48 @@ extern "C" {
 __declspec(dllexport) int SSL_IsOpenVrProxy() { return 1; }
 
 __declspec(dllexport) uint32_t VR_InitInternal(int* peError, int eType) {
+    EnsureStock();
     return pInit ? pInit(peError, eType) : 1;
 }
 __declspec(dllexport) uint32_t VR_InitInternal2(int* peError, int eType, const char* info) {
+    EnsureStock();
     if (pInit2) return pInit2(peError, eType, info);
     return pInit ? pInit(peError, eType) : 1;
 }
-__declspec(dllexport) void VR_ShutdownInternal() { if (pShutdown) pShutdown(); }
-__declspec(dllexport) bool VR_IsHmdPresent() { return pIsHmd ? pIsHmd() : false; }
-__declspec(dllexport) bool VR_IsRuntimeInstalled() { return pIsRuntime ? pIsRuntime() : false; }
-__declspec(dllexport) const char* VR_RuntimePath() { return pRuntimeOld ? pRuntimeOld() : ""; }
+__declspec(dllexport) void VR_ShutdownInternal() {
+    EnsureStock();
+    if (pShutdown) pShutdown();
+}
+__declspec(dllexport) bool VR_IsHmdPresent() {
+    EnsureStock();
+    return pIsHmd ? pIsHmd() : false;
+}
+__declspec(dllexport) bool VR_IsRuntimeInstalled() {
+    EnsureStock();
+    return pIsRuntime ? pIsRuntime() : false;
+}
+__declspec(dllexport) const char* VR_RuntimePath() {
+    EnsureStock();
+    return pRuntimeOld ? pRuntimeOld() : "";
+}
 __declspec(dllexport) bool VR_GetRuntimePath(char* buf, uint32_t size, uint32_t* required) {
+    EnsureStock();
     return pRuntimePath ? pRuntimePath(buf, size, required) : false;
 }
 __declspec(dllexport) bool VR_IsInterfaceVersionValid(const char* name) {
+    EnsureStock();
     return pIsVersion ? pIsVersion(name) : false;
 }
-__declspec(dllexport) uint32_t VR_GetInitToken() { return pToken ? pToken() : 0; }
+__declspec(dllexport) uint32_t VR_GetInitToken() {
+    EnsureStock();
+    return pToken ? pToken() : 0;
+}
 __declspec(dllexport) const char* VR_GetVRInitErrorAsSymbol(int err) {
+    EnsureStock();
     return pErrSym ? pErrSym(err) : "Unknown";
 }
 __declspec(dllexport) const char* VR_GetVRInitErrorAsEnglishDescription(int err) {
+    EnsureStock();
     return pErrEng ? pErrEng(err) : "Unknown";
 }
 __declspec(dllexport) const char* VR_GetStringForHmdError(int err) {
@@ -339,12 +337,12 @@ __declspec(dllexport) const char* VR_GetStringForHmdError(int err) {
 }
 
 __declspec(dllexport) void* VR_GetGenericInterface(const char* name, int* peError) {
+    EnsureStock();
     void* iface = pGetIface ? pGetIface(name, peError) : nullptr;
     if (!iface || !name) return iface;
     Log("GetGenericInterface %s", name);
-    if (strncmp(name, "IVRSystem_", 10) == 0) HookSystem(iface, name);
     if (strncmp(name, "IVRCompositor_", 14) == 0) HookCompositor(iface, name);
-    WriteAlive(0, IdentityRigid());
+    if (!gPassthrough) WriteAlive(0, IdentityRigid());
     return iface;
 }
 
@@ -354,13 +352,6 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
         char exe[MAX_PATH]{};
         GetModuleFileNameA(nullptr, exe, MAX_PATH);
         Log("DllMain PROCESS_ATTACH pid=%lu exe=%s", GetCurrentProcessId(), exe);
-        gStock = LoadStock();
-        if (gStock) {
-            BindStock(gStock);
-            EnsureGeom();
-            WriteAlive(0, IdentityRigid());
-            Log("stock bound, Game.v1 heartbeat written");
-        }
     } else if (reason == DLL_PROCESS_DETACH) {
         Log("DllMain PROCESS_DETACH pid=%lu", GetCurrentProcessId());
     }
