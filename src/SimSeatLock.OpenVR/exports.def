@@ -1,0 +1,16 @@
+LIBRARY openvr_api
+EXPORTS
+    VR_InitInternal
+    VR_InitInternal2
+    VR_ShutdownInternal
+    VR_IsHmdPresent
+    VR_IsRuntimeInstalled
+    VR_RuntimePath
+    VR_GetRuntimePath
+    VR_GetGenericInterface
+    VR_IsInterfaceVersionValid
+    VR_GetInitToken
+    VR_GetVRInitErrorAsSymbol
+    VR_GetVRInitErrorAsEnglishDescription
+    VR_GetStringForHmdError
+    SSL_IsOpenVrProxy
