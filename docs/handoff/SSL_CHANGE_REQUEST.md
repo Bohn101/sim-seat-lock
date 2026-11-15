@@ -18,15 +18,19 @@ A chart of the One-Euro idea in R5 is at [`docs/handoff/img/one_euro_demo.png`](
 - Credit design review notes as **Byte (design review)** and research notes as **Nobel (research)**.
 - Log first, then change math. See the suggested build order below.
 
+## Confirmed IMU (Steven, Nov 15, 2026)
+
+Witmotion **WT901C-232** (RS232 version) on COM8 at **115200** baud. Output rate is currently **100 Hz** (Steven sees about 100 Hz in the Pose app). Bandwidth is not recorded. He would prefer **200 Hz** if it works; he is unsure whether an earlier attempt failed because the unit could not do 200 Hz or because it was too noisy. The 100 vs 200 Hz test is in R9. Official docs confirm 200 Hz is a listed rate on this model. The IMU cannot output 250 Hz; any "250 Hz" figure below is the Pose publish loop, which can only repeat samples once the IMU has been read.
+
 ## Nobel's ranked likely causes (research)
 
 Steven's report: with compensation armed, VR feels a little less smooth and somewhat nauseating; with it disarmed, being moved through the cockpit is much worse. Nobel's ranked list, to be confirmed from the first Combined log (R1) before any math change:
 
-1. **Timer quantization.** Serial loop polls `BytesToRead` then `WaitOne(4)`. Publish loop uses `Environment.TickCount64` plus `Thread.Sleep`. Neither calls `timeBeginPeriod` or uses a high-resolution timer [code]. Processes that do not call `timeBeginPeriod` get the default ~15.6 ms tick [source]. [inference] The "250 Hz" publish is most likely about 64 Hz in steps. Sample age sawtooths from 0 to about 16 ms, sometimes 30 ms, and beats against the 90/120 Hz frame rate. At 20 deg/s, 15.6 ms of age variation is about 0.31 deg (19 arcmin) of frame-to-frame error, above Meta's 0.77 arcmin jitter threshold. Fix is in R8.
+1. **Timer quantization.** Serial loop polls `BytesToRead` then `WaitOne(4)`. Publish loop uses `Environment.TickCount64` plus `Thread.Sleep`. Neither calls `timeBeginPeriod` or uses a high-resolution timer [code]. Processes that do not call `timeBeginPeriod` get the default ~15.6 ms tick [source]. [inference] The software "250 Hz" publish loop is most likely about 64 Hz in steps. The IMU itself is at 100 Hz today (max 200 Hz on the WT901C-232), so the loop cannot invent new IMU samples either way. Sample age sawtooths from 0 to about 16 ms, sometimes 30 ms, and beats against the 90/120 Hz frame rate. At 20 deg/s, 15.6 ms of age variation is about 0.31 deg (19 arcmin) of frame-to-frame error, above Meta's 0.77 arcmin jitter threshold. Fix is in R8.
 2. **No time alignment.** The layer applies the latest rig sample to an HMD pose already predicted to display time, and ignores `viewLocateInfo->displayTime`. Gyro packets (0x52) are parsed but discarded [code]. Residual world motion equals rig rate times lag, and shows up as "swim" when the platform changes direction [inference, with [source] on OpenXR `xrWaitFrame` and LaValle prediction]. Gyro prediction, capped at 40 ms, is in R5.
 3. **Probable CoR error.** `imu_to_eye_m` = (0, 1.15, 0.27) m is used as an absolute pivot in the app's reference space [code]. [inference] The true pivot in that space is (neutral eye position) minus (imu_to_eye), about 1.15 m below the eyes, not 1.15 m above the space origin, so the pivot may be about 1.15 m too high unless the space origin already sits at the IMU. Rotation can still cancel (horizon planted, acceptance tests pass) while a translation residual remains: about 5 cm of view slide for a 1 m error at 3 deg of pitch [inference]. That is a classic visual-vestibular conflict. **Do not change geometry until the sine-pitch test in R4 has been run.**
 4. **OpenXR layer does not restore the uncompensated pose in `xrEndFrame`** (OXRMC does) [code, source]. [inference] Late reprojection can fight the compensation, worse on ACE/LMU than AMS2/ACC. New item: R12. Runtime behavior on PSVR2 is not documented in sources Nobel could open; see Gaps.
-5. **Witmotion defaults.** Bandwidth defaults to 20 Hz (lag and repeated samples when the output rate is higher). Output rate is capped at 200 Hz. The Kalman tilt estimate uses the accelerometer, which platform linear acceleration corrupts. Dynamic accuracy is about 1 deg [source: WT901C materials; see Gaps]. Reconfig is in R9.
+5. **Witmotion config.** The unit is a WT901C-232 at 100 Hz, 115200 baud. The RS232 manual default bandwidth is 20 Hz; if that is still set, a 100 Hz output "will be 5 repeating data" [source: WT901C RS232 manual v0707, section 2.4.8]. Maximum listed output rate is 200 Hz [source: WT901C RS232 datasheet v20-0707]. Bandwidth is not yet read from the device. The 100 vs 200 Hz test, and how to set rate and bandwidth, is in R9.
 
 Smaller, still worth logging: translation gains are all 0, so platform heave/surge/sway stay in the view [code]; torn shared-memory reads [code]; Euler order and axis-mapping may be slightly wrong for combined pitch plus roll [inference].
 
@@ -39,7 +43,7 @@ Logging first. Do not change compensation math until one session has been record
 3. Finish **R8** (event-driven serial, timer resolution) if the log shows the 15.6 ms step.
 4. **R4 CoR sine-pitch test.** Only then consider a geometry change.
 5. **R12** `xrEndFrame` restore, with an A/B toggle.
-6. **R9** Witmotion output and bandwidth, after Steven confirms the IMU model (see Open questions).
+6. **R9** 100 vs 200 Hz test (bandwidth and baud included), now that the model is confirmed as WT901C-232 at 100 Hz / 115200. Do this before treating 200 Hz as the new running rate.
 7. **R5** gyro prediction (clamp 40 ms) and One-Euro, after the raw lag in R8 is reduced. Prediction should stay "a small amount" [source: Carmack, via Nobel].
 8. **R7**, **R10**, and **R11** can proceed in parallel once the live path is stable.
 
@@ -160,7 +164,7 @@ These are safety items, not tunables hidden in a file. Show fallback state on th
 
 **Today.** The publish loop is a UI-owned thread sleeping on `Environment.TickCount64` toward a 4 ms period. The serial loop polls `BytesToRead`, then `WaitOne(4)` when no data is waiting. IMU, SteamVR, and Game each run `Task.Run` loops with 4-8 ms waits. The SteamVR poll `AllocHGlobal`s every read. Stamps are `DateTime.UtcNow`. There is no `timeBeginPeriod` call, no `GCSettings.LatencyMode` setting, and no high-resolution wait [code].
 
-**Why this is first among the nausea causes (Nobel (research)).** Since Windows 10 2004, `timeBeginPeriod` is per process, and a process that does not call it gets the default resolution [source: Microsoft]. The default tick is 15.625 ms, so `Sleep(1)` can wake 1 to 16.6 ms later [source: Dawson]. [inference] A "250 Hz" publish is most likely about 64 Hz in steps, with sample age walking a 0 to 16 ms sawtooth. Witmotion output is also capped at 200 Hz [source], so a 250 Hz loop would only re-send samples even if the timer were fixed [inference]. `BytesToRead` is an unreliable way to wait on a .NET `SerialPort` [source: Voigt, via Nobel]. Windows 11 may also drop a raised timer resolution when the window is minimized or occluded [source: `timeBeginPeriod` docs], and the pose UI is usually hidden behind the game, which is another reason to be event-driven rather than sleep-based [inference].
+**Why this is first among the nausea causes (Nobel (research)).** Since Windows 10 2004, `timeBeginPeriod` is per process, and a process that does not call it gets the default resolution [source: Microsoft]. The default tick is 15.625 ms, so `Sleep(1)` can wake 1 to 16.6 ms later [source: Dawson]. [inference] A software "250 Hz" publish is most likely about 64 Hz in steps, with sample age walking a 0 to 16 ms sawtooth. The WT901C-232 maximum listed output rate is 200 Hz, and the unit is at 100 Hz today [source: WT901C RS232 datasheet v20-0707; Steven], so a 250 Hz loop would only re-send samples even if the timer were fixed [inference]. `BytesToRead` is an unreliable way to wait on a .NET `SerialPort` [source: Voigt, via Nobel]. Windows 11 may also drop a raised timer resolution when the window is minimized or occluded [source: `timeBeginPeriod` docs], and the pose UI is usually hidden behind the game, which is another reason to be event-driven rather than sleep-based [inference].
 
 **Want (Byte, design review, tightened with Nobel (research)):**
 
@@ -173,18 +177,53 @@ These are safety items, not tunables hidden in a file. Show fallback state on th
 
 This is what keeps a UI redraw, a 15.6 ms sleep, or a GC pause from becoming visible judder in the headset.
 
-## R9. Witmotion packets and device configuration
+## R9. Witmotion packets, 100 vs 200 Hz, and device configuration
 
-**Today.** The parser already accepts the standard 0x55 types, including time (0x50), gyro (0x52), and quaternion (0x59). Only angle (0x53) updates `T_rig`, and only accel is stored on the side. `DroppedChecksum` is correct (checksum/sync only). Angle samples are stamped with `DateTime.UtcNow`, not a device clock. There is no device sample counter in the log, so serial buffering and IMU rate jitter cannot be separated (Byte, design review). Gyro is discarded, so the layer cannot predict to display time [code].
+**Hardware, now confirmed.** WT901C-232 (RS232) on COM8 at 115200 baud, currently 100 Hz output. Bandwidth is unknown. Steven would prefer 200 Hz if it works and is not too noisy.
 
-**Device-side defaults, from Nobel (research).** Bandwidth defaults to 20 Hz, which adds lag and causes repeated samples when the output rate is higher. Output rate is capped at 200 Hz. The Kalman tilt estimate uses the accelerometer, which platform linear acceleration corrupts. Dynamic accuracy is about 1 deg [source: WT901C RS232 manual, datasheet, and WT901 page]. Those figures come from search extracts; the PDFs would not download (see Gaps). The exact Witmotion model on the P5, and its current output rate and bandwidth, are not recorded in the repo: that is a question for Steven.
+**Sources used for the figures below (official docs, opened this session):**
 
-**Want.**
+- WT901C RS232 Datasheet v20-0707, WitMotion Shenzhen, http://wiki.wit-motion.com/english (PDF: https://m.media-amazon.com/images/I/81Nb0OIHYKL.pdf)
+- WT901C RS232 User Manual v0707, same wiki (PDF: https://m.media-amazon.com/images/I/B1C1af4xBpS.pdf)
+- WIT Standard Communication Protocol (stated as suitable for TTL and 232): https://wit-motion.gitbook.io/witmotion-sdk/wit-standard-protocol/wit-standard-communication-protocol
+- WT901C family product page (gyro RMS at 100 Hz bandwidth only): https://www.wit-motion.com/StandardPrecisionTilt/83.html
 
-- Parse and log TypeTime and a monotonic device sample counter alongside the QPC arrival time. Log gyro (and use it in the R5 predictor / complementary option). Optionally prefer the device quaternion when it is present, instead of packing Euler angles. Do not integrate accelerometer packets into position (existing rule).
-- After Steven confirms the model, reconfigure the IMU with its PC software: **200 Hz output**, bandwidth at least 200 Hz (**256 Hz**, so bandwidth stays above the output rate, per the manual [source]), output only angle plus gyro (plus quaternion if available), and 230400 baud if the converter allows it (Nobel (research)).
-- Check the COM8 driver's latency-timer setting in Device Manager. An FTDI default of 16 ms was cited in search excerpts only and is unverified (see Gaps).
-- A combined-axis garage test (pitch plus roll together) to check Euler order and the hand-tuned invert / swap flags [inference].
+**Is 200 Hz possible on the 232 version?** Yes, as a listed setting. The RS232 datasheet says "Maximum 200Hz data output rate" and "0.2Hz--200Hz", and the RATE register includes `0x0B` = 200 Hz (also 100 Hz = `0x09`, 125 Hz = `0x0A`) [source: datasheet sections 2, 3.1, 6.2.9]. The RS232 manual: "the highest return rate supports 200Hz" [source: section 2.4.2]. The current standard protocol lists the same 200 Hz code (`0x0B`) [source: GitBook RRATE]. It was not a model limit that kept this unit at 100 Hz; whether 200 Hz is too noisy is what the test below has to answer. The module will automatically drop below the requested rate if the enabled packets do not fit the baud [source: manual 2.4.2].
+
+**Packets (11 bytes each).** Every output type is an 11-byte frame: `0x55`, type, eight data bytes, checksum [source: datasheet 6.1]. SimSeatLock's parser accepts types `0x50` through `0x5A` plus `0x5F` [code: `WitmotionProtocol.IsKnownType`]. The serial source currently *uses* only angle (`0x53`) for `T_rig` and stores accel (`0x51`) on the side. Gyro (`0x52`), time (`0x50`), and quaternion (`0x59`) are already parsed and then ignored. R9 still wants those three enabled for logging and for the R5 predictor. Mag (`0x54`) is not needed.
+
+Default output content is acc + gyro + angle + mag: datasheet RSW default bits, and GitBook RSW default `0x001E` [source]. That is 4 packets, 44 bytes per cycle. The RS232 manual also says "1 data packet is 33 bytes by default" (3 x 11). Those two official figures disagree; do not assume either until "Read Config" shows what this unit actually emits. Factory default rate is 10 Hz and default baud is 9600, so this unit has already been changed from factory (it is at 100 Hz / 115200).
+
+**Baud math (8N1).** SimSeatLock's current serial settings are 8 data bits, no parity, 1 stop bit (`pose.json` / `SerialSettings`), which is 10 bits on the wire per byte. The datasheet lists baud rates and mentions "stop bit and parity" but does not spell out 8N1 in the extracted pages; the 10-bits-per-byte figures below assume the app's current 8N1. Bytes/s = 11 x (packets per cycle) x rate. Bits/s = bytes/s x 10.
+
+| Packets per cycle | 100 Hz bytes/s (bits/s) | 200 Hz bytes/s (bits/s) | Fits 115200? | Fits 230400? |
+|---|---|---|---|---|
+| 2 (angle + gyro) | 2,200 (22,000) | 4,400 (44,000) | yes | yes |
+| 4 (R9 set: time + gyro + angle + quat, or default acc + gyro + angle + mag) | 4,400 (44,000) | 8,800 (88,000) | yes, about 76% of 115200 | yes |
+| 6 (default four plus time and quat) | 6,600 (66,000) | 13,200 (132,000) | no, 200 Hz would exceed 115200 and the module would auto-reduce the rate | yes |
+
+For the R9 packet set (4 frames), **115200 is enough on paper at 200 Hz**. If time and quat are added *on top of* the default four, 200 Hz needs **230400**. The manual's advice for a high return rate is "generally 115200" [source: 2.4.2]. Confirmed baud codes on this model, from both the RS232 datasheet and GitBook: 4800, 9600 (default), 19200, 38400, 57600, 115200 (`0x06`), 230400 (`0x07`). The RS232 datasheet also lists 460800 and 921600; the current GitBook protocol says those two "Only supports WT931/JY931/HWT606/HWT906". Treat 460800 and 921600 as unverified on the WT901C-232. Do not use them for this test.
+
+**Bandwidth.** RS232 manual default is 20 Hz [source: 2.4.8]. GitBook BANDWIDTH default is `0x0004` = 20 Hz, with options 256, 188, 98, 42, 20, 10, and 5 Hz (`0x00` through `0x06`) [source]. An older 2019 family spec says the default is 10 Hz; that disagrees with the RS232 manual and GitBook, so read the live value rather than assuming. Effect, from the RS232 manual [source: 2.4.8]: higher bandwidth gives more fluctuation in the waveform, lower bandwidth is more fluent; at bandwidth 20 Hz and a 100 Hz retrieval rate "there will be 5 repeating data"; "if you prefer there is no repeating data, it is required to increase the bandwidth more than 100Hz." At 200 Hz, the only listed option above 200 Hz is **256 Hz**. Official docs do not publish a still-angle RMS table versus output rate or bandwidth. The family product page gives gyro RMS noise of 0.028 to 0.07 deg/s at bandwidth = 100 Hz only [source: wit-motion.com WT901C page]; that is not a 100 vs 200 Hz comparison. The noise trade-off at 200 Hz has to be measured.
+
+**How to set rate, bandwidth, and baud.** Prefer the Witmotion PC software (the path in the RS232 manual): Unlock the sensor, use Read Config first and write down rate, baud, bandwidth, and enabled content, then set Output Rate, Band Width, Baud Rate, and Content as needed, then Save Config. After a baud change, reconnect the software (and Pose) at the new baud; the module will no longer output on the old baud [source: manual 2.4.3]. After a rate change, the datasheet says to save and re-power the module for the setting to take effect [source: datasheet 6.2.9].
+
+Serial command sequence, from the current standard protocol [source: GitBook]: commands must finish within 10 seconds or the unit locks again. Unlock (`KEY` 0x69, write 0xB588): `FF AA 69 88 B5`. Then the change, for example 200 Hz `FF AA 03 0B 00`, 100 Hz `FF AA 03 09 00`, 256 Hz bandwidth `FF AA 1F 00 00`, 188 Hz bandwidth `FF AA 1F 01 00`, 115200 baud `FF AA 04 06 00`, 230400 baud `FF AA 04 07 00`. Save: `FF AA 00 00 00`. Factory reset is `FF AA 00 01 00` (SAVE = 0x0001). Do not factory-reset as a way back to today's setup: factory defaults are 10 Hz and 9600 baud, not 100 Hz and 115200.
+
+**USB-serial adapter.** The WT901C-232 is an RS232-level sensor; the USB chip is in the cable or converter, not specified as part of the IMU. Official accessory docs in the RS232 manual say to install **CH340** (3-in-1 converter / RS232 serial cable) or **CP2102** (6-in-1 converter) [source: manual, connection steps]. Which chip is on Steven's COM8 is unknown. If the adapter is FTDI, a 16 ms latency timer is a commonly cited default, but that figure was not verified from FTDI documentation (see Gaps). Check the adapter in Device Manager before blaming the IMU for lag.
+
+**Parser and logging (unchanged want).** Parse and log TypeTime and a monotonic sample counter alongside the QPC arrival time. Log gyro (and use it in the R5 predictor). Optionally prefer the device quaternion when it is present, instead of packing Euler angles. Do not integrate accelerometer packets into position (existing rule). A combined-axis garage test (pitch plus roll together) to check Euler order remains in this item.
+
+**100 vs 200 Hz test plan.** Use R1 Combined logs (QPC stamps). Do not leave the unit at 200 Hz as the daily rate until this comparison is done. Record the live config first.
+
+1. **Baseline, no IMU changes:** 100 Hz, 115200, current bandwidth and current packet set. Log: angle-packet interval (median, p95, histogram of `t_rx_qpc` deltas), packet rate vs unique-sample rate, duplicate rate (identical consecutive angles), still-noise RMS in deg on a parked platform, and lag of the angle against a sharp pitch or roll step (platform jog or a known IMU tilt). If duplicates are about 5-in-a-row, the bandwidth is still near the 20 Hz default [source: manual 2.4.8].
+2. **Bandwidth only, stay at 100 Hz / 115200:** set bandwidth to 188 Hz, then to 256 Hz. Repeat the same metrics. This separates "too noisy" from "too many repeats" without changing the rate.
+3. **Prepare the line for 200 Hz:** if Read Config shows more than four enabled packets, either turn off mag (and accel if it is not needed) so the R9 set is time + gyro + angle + quat (4 x 11 bytes, 115200 is enough), or raise baud to 230400 first and set Pose to 230400 before raising the rate. Set bandwidth to 256 Hz before requesting 200 Hz.
+4. **200 Hz at 256 Hz bandwidth:** save, re-power, confirm the Pose Hz readout and the log interval are actually ~5 ms, not a silently reduced rate. Repeat the same metrics, including the step lag and still-noise RMS.
+5. **Optional:** 200 Hz at 188 Hz bandwidth (188 is below 200, so some repeats are possible; measure, do not assume).
+6. **Compare** 100 Hz vs 200 Hz at the same bandwidth (256 Hz), and 20 (or whatever was baseline) vs 188 vs 256 at 100 Hz. Decide from the logs: keep 100 Hz if 200 Hz still-noise or step ringing is clearly worse; move to 200 Hz if intervals are clean, duplicates are gone, and still-noise is acceptable. Steven's preference is 200 Hz if it works, because smoothing still has fresher samples to work with.
+
+**How to revert.** Set the IMU back to the recorded baseline, not to factory defaults: Unlock, 100 Hz (`FF AA 03 09 00`), 115200 if baud was changed (`FF AA 04 06 00`), the recorded bandwidth and content, Save (`FF AA 00 00 00`), re-power. In the PC software the same values, Save Config, reconnect at 115200. Set the Pose port baud back to 115200 if it was changed, and confirm the app shows about 100 Hz before the next driving session.
 
 ## R10. Engine detection and Game heartbeat freshness
 
@@ -227,7 +266,7 @@ Byte's reasons:
 Nobel's reasons, in agreement:
 
 - The real problem today is not the language. It is polling and sleeping on a 15.6 ms timer [code + source].
-- Witmotion tops out at 200 Hz [source], so a "250 Hz" publish only re-sends samples. Event-driven publishing on each packet gives the lowest latency [inference].
+- The WT901C-232 tops out at 200 Hz and is at 100 Hz today [source], so a "250 Hz" publish only re-sends samples. Event-driven publishing on each packet gives the lowest latency [inference].
 - The GIL lets only one thread run Python code at a time, the switch interval is only an ideal, and the same Windows timer issue plus an extra interop layer would still be there [source + inference]. Python is fine for offline analysis of logs (pandas, numpy, scipy); not for the real-time loop.
 
 Python is the right tool for the offline analysis script, plots, and the latency / smoothness report in R3 (and for the One-Euro explainer chart). That is the split.
@@ -245,16 +284,17 @@ Python would make it easier to share plot and analysis code with the research sc
 - Should the new smoother and the new logging default on, or default off, when 0.2.5 is first installed?
 - Are you happy with the product name **Bohnster SimSeatLock** (by Bohnster Innovations)?
 - WPF vs Avalonia for the restyle: team can recommend with a short mock, unless you already have a preference.
-- **What exact Witmotion model is on the P5, and what output rate and bandwidth is it set to today?** Those values are not in the repo, and they decide the R9 reconfig (Nobel (research)).
+- IMU model and rate are now known (WT901C-232, 100 Hz, COM8 115200). Still unknown: **what bandwidth is the unit set to today**, and **which USB-serial chip is on the COM8 adapter** (official accessories are CH340 or CP2102; FTDI is possible if a third-party cable is in use)? "Read Config" in the Witmotion PC software will show the bandwidth.
 
-## Gaps in the research (Nobel)
+## Gaps in the research
 
 These are limits on the evidence, not extra build items:
 
-- The FTDI 16 ms latency-timer figure is unverified. ftdichip.com returned 520 or a Cloudflare challenge; the number is from a search excerpt only.
-- Witmotion figures (20 Hz default bandwidth, 200 Hz max output, accelerometer in the tilt Kalman, 1 deg dynamic accuracy) are from search extracts. The Witmotion PDFs would not download to the box.
+- The FTDI 16 ms latency-timer figure is still unverified from FTDI's own docs. It only matters if the COM8 adapter is FTDI; official WT901C-232 accessories in the RS232 manual are CH340 or CP2102, and the chip on COM8 is unknown.
+- Official WT901C RS232 datasheet and manual PDFs were obtained this session (v20-0707 / v0707, wiki.wit-motion.com/english). Two official disagreements remain: the manual's "33 bytes by default" versus the datasheet/GitBook default of four 11-byte packets (44 bytes), and an older 2019 family spec that says default bandwidth is 10 Hz versus the RS232 manual and GitBook default of 20 Hz. Read the live config rather than assuming.
+- 460800 and 921600 baud are listed in the RS232 datasheet but restricted to other models in the current GitBook protocol. Not used in the R9 test.
+- Official docs do not give a still-angle RMS or lag table versus 100 Hz vs 200 Hz, or versus bandwidth. That is why the R9 test measures it. The family page gyro RMS (0.028 to 0.07 deg/s) is only at bandwidth = 100 Hz.
 - No PSVR2-specific SteamVR reprojection documentation was found or opened, so the runtime side of cause 4 / R12 is inference backed by OXRMC's design.
-- The exact Witmotion model on the P5, and its current output rate and bandwidth, are not recorded: question for Steven, above.
 
 ## Already on the roadmap, not this revision
 
